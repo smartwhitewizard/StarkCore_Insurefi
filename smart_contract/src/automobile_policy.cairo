@@ -14,17 +14,26 @@ pub mod Automobile_calculator {
     use core::option::OptionTrait;
 use core::traits::Into;
 use core::starknet::event::EventEmitter;
-    use super::ContractAddress;
-    use starknet::get_caller_address;
+use super::ContractAddress;
+use starknet::get_caller_address;
 
     #[storage]
     struct Storage {
         policies: LegacyMap<u8, Vehicle>,
+        vehicle_owner: LegacyMap<ContractAddress, Vehicle>,
+        policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
         owner: ContractAddress,
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
         vehicleCategories: LegacyMap<felt252, i16>,
+    }
+
+    #[derive(Drop,Serde, starknet::Store)]
+    pub enum ClaimStatus {
+        Claimed,
+        Processing,
+        Denied,
     }
 
     #[derive(Drop, Serde, starknet::Store)]
@@ -41,8 +50,33 @@ use core::starknet::event::EventEmitter;
         value: i32,
         driver: ContractAddress,
         insured: bool,
-        premium: u32
+        premium: u32,
+        policy_creation_date: u16,
+        policy_termination_date: u16,
+        policy_last_payment_date: u16,
+        policy_is_active:bool,
+        policy_holder: ContractAddress,
+        claim_status: bool,
+        img_url:felt252
+
     }
+    #[derive(Drop, Serde, starknet::Store)]
+    pub struct Claim {
+        id: u8,
+        policy_holder: ContractAddress,
+        claim_amount: u8,
+        claim_details: ByteArray,
+        claim_status: ClaimStatus,
+        accident_image: felt252      
+
+    }
+
+    #[derive(Drop, Serde, starknet::Store)]
+   pub trait Processing {
+        fn process(self: ClaimStatus);
+    }
+    
+   
 
     
 
@@ -63,7 +97,7 @@ use core::starknet::event::EventEmitter;
             let sf = self.safetyFeatureAdjustments.read(safety_features);
             let cv = self.coverageTypeMultipliers.read(coverage_type);
 
-            let vehicle_data = Vehicle { id: id, driver: driver, driver_age: driver_age, no_of_accidents: no_of_accidents, violations: violations, vehicle_age: vehicle_age, milage:mileage, vehicle_Category: vc, safety_features: sf, coverage_type:cv, value: value, insured: false, premium: 0};
+            let vehicle_data = Vehicle { id: id, driver: driver, driver_age: driver_age, no_of_accidents: no_of_accidents, violations: violations, vehicle_age: vehicle_age, milage:mileage, vehicle_Category: vc, safety_features: sf, coverage_type:cv, value: value, insured: false, premium: 0, policy_creation_date: 0, policy_termination_date: 0, policy_last_payment_date: 0, policy_is_active:false, policy_holder:driver, claim_status: false, img_url: 'Blank'};
 
             self.policies.write(id, vehicle_data);
             self.policy_id_counter.write(id);
@@ -159,6 +193,17 @@ use core::starknet::event::EventEmitter;
             self.owner.read()
         }
                                                                                 
+    }
+
+    
+    impl ProcessingImpl of Processing {
+        fn process(self: ClaimStatus) {
+            match self {
+                ClaimStatus::Claimed => { println!("quitting") },
+                ClaimStatus::Processing => { println!("Processing") },
+                ClaimStatus::Denied => { println!("Denied") },
+            }
+        }
     }
 
     #[generate_trait]
