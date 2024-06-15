@@ -57,10 +57,10 @@ fn test_for_vehicle_registration() {
 
     // /////////// VEHICLE 2
 
-    let driver1: ContractAddress = 'DRIVER1'.try_into().unwrap();
-    let sf1 = 'all';
-    let cv1 = 'comprehensive';
-    let ca1 = 'luxury';
+    // let driver1: ContractAddress = 'DRIVER1'.try_into().unwrap();
+    // let sf1 = 'all';
+    // let cv1 = 'comprehensive';
+    // let ca1 = 'luxury';
 
     let vehicle1 = dispatcher.register_vehicle(driver, 25, 2, 0, ca, 21, 20100, sf, cv, 30000 );
 
