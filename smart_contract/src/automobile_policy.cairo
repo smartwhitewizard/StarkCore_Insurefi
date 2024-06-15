@@ -4,27 +4,29 @@ use starknet::ContractAddress;
 pub trait Iautomobile_insurance<T> {
     fn register_vehicle(ref self: T, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool;
     fn generate_premium(ref self: T, policy_id: u8) -> u32;
-    fn initiate_policy(ref self: T, policy_id: u8) -> bool;
+    // fn initiate_policy(ref self: T, policy_id: u8) -> bool;
     fn get_owner(self: @T) -> ContractAddress;
     fn get_specific_vehicle(self: @T, id: u8) -> Automobile_calculator::Vehicle;
     fn get_specific_vehiclea(self: @T, id: u8) -> u8;
-    // Function to get the balance of an account
-    fn balanceOf(self: @T,address: ContractAddress) -> u64;
 
-    // Function to transfer tokens
-    fn transfer(ref self:T,to: ContractAddress, amount: u64) -> bool;
-}
 
-#[starknet::interface]
-pub trait IERC20Camel<TState> {
-    fn totalSupply(self: @TState) -> u256;
-    fn balanceOf(self: @TState, account: ContractAddress) -> u256;
-    fn allowance(self: @TState, owner: ContractAddress, spender: ContractAddress) -> u256;
-    fn transfer(ref self: TState, recipient: ContractAddress, amount: u256) -> bool;
+    fn name(self: @T) -> felt252;
+    fn symbol(self: @T) -> felt252;
+    fn decimals(self: @T) -> u8;
+    fn totalSupply(self: @T) -> u256;
+    fn balanceOf(self: @T, owner: ContractAddress) -> u256;
+
+    fn transfer(ref self: T, to: ContractAddress, value: u256) -> bool;
     fn transferFrom(
-        ref self: TState, sender: ContractAddress, recipient: ContractAddress, amount: u256
+        ref self: T, from: ContractAddress, to: ContractAddress, value: u256
     ) -> bool;
-    fn approve(ref self: TState, spender: ContractAddress, amount: u256) -> bool;
+    fn approve(ref self: T, spender: ContractAddress, value: u256) -> bool;
+    fn allowance(self: @T, owner: ContractAddress, spender: ContractAddress) -> u256;
+
+    // Mint and Burn
+    fn mint(ref self: T, to: ContractAddress, value: u256);
+    fn burn(ref self: T, from: ContractAddress, value: u256);
+   
 }
 
 #[starknet::contract]
@@ -33,13 +35,12 @@ use core::option::OptionTrait;
 use core::traits::Into;
 use core::starknet::event::EventEmitter;
 use super::ContractAddress;
-use starknet::get_caller_address;
-use starknet:: get_block_timestamp;
+use starknet:: {get_block_timestamp, contract_address_const, get_caller_address};
 
     #[storage]
     struct Storage {
         policies: LegacyMap<u8, Vehicle>,
-        voters: Array<ContractAddress>,
+        // voters: Array<ContractAddress>,
         vehicle_owner: LegacyMap<ContractAddress, Vehicle>,
         policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
@@ -47,6 +48,12 @@ use starknet:: get_block_timestamp;
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
         vehicleCategories: LegacyMap<felt252, i16>,
+        name: felt252,
+        symbol: felt252,
+        decimals: u8,
+        totalSupply: u256,
+        balances: LegacyMap::<ContractAddress, u256>,
+        allowances: LegacyMap::<(ContractAddress, ContractAddress), u256>,
     }
 
     #[derive(Drop,Serde, starknet::Store)]
@@ -97,6 +104,46 @@ use starknet:: get_block_timestamp;
         fn process(self: ClaimStatus);
     }
     
+    // Events
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        Transfer: Transfer,
+        Approval: Approval,
+        Mint: Mint,
+        Burn: Burn,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct Transfer {
+        #[key]
+        from: ContractAddress,
+        to: ContractAddress,
+        value: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct Approval {
+        #[key]
+        owner: ContractAddress,
+        spender: ContractAddress,
+        value: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct Mint {
+        #[key]
+        to: ContractAddress,
+        value: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct Burn {
+        #[key]
+        from: ContractAddress,
+        value: u256,
+    }
+
    
 
     
@@ -105,6 +152,9 @@ use starknet:: get_block_timestamp;
     fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
         self.owner.write(initial_owner);
          self.set_categories();
+         self.name.write('INSUREFI');
+        self.symbol.write('IFI');
+        self.decimals.write(18);
     }
 
 
@@ -215,26 +265,26 @@ use starknet:: get_block_timestamp;
 
         // INITIATE POLICY
 
-        fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
-            let mut generated_policy = self.policies.read(policy_id);
-            let active = generated_policy.policy_is_active;
-            assert(!active, 'Policy is already active');
+        // fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
+        //     let mut generated_policy = self.policies.read(policy_id);
+        //     let active = generated_policy.policy_is_active;
+        //     assert(!active, 'Policy is already active');
 
-            /////////////////////////////////////////////////
-            //  I NEED TO ACCEPT PAYMETS IN THIS FUNCTION  //
-            ////////////////////////////////////////////////
+        //     /////////////////////////////////////////////////
+        //     //  I NEED TO ACCEPT PAYMETS IN THIS FUNCTION  //
+        //     ////////////////////////////////////////////////
             
-           generated_policy.policy_is_active = true;
-           generated_policy.voting_power = true;
+        //    generated_policy.policy_is_active = true;
+        //    generated_policy.voting_power = true;
 
-           generated_policy.policy_creation_date = get_block_timestamp();
-           generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
-           generated_policy.policy_last_payment_date = get_block_timestamp();
+        //    generated_policy.policy_creation_date = get_block_timestamp();
+        //    generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
+        //    generated_policy.policy_last_payment_date = get_block_timestamp();
 
 
-            self.policies.write(generated_policy.id, generated_policy);
-            true
-        }
+        //     self.policies.write(generated_policy.id, generated_policy);
+        //     true
+        // }
 
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
@@ -243,20 +293,74 @@ use starknet:: get_block_timestamp;
 
 
         
-        fn balanceOf( self: @ContractState,  address: ContractAddress) -> u64 {
-            // let dispatcher = Dispatcher::new(token_address);
-            // ERC20::balanceOf(dispatcher, user_address)
-
-            25
+        fn name(self: @ContractState) -> felt252 {
+            self.name.read()
         }
-    
-        // Function to transfer tokens
-        
-        fn transfer( ref self: ContractState, to: ContractAddress, amount: u64) -> bool {
-            // let dispatcher = Dispatcher::new(token_address);
-            // ERC20::transfer(dispatcher, to, amount)
+
+        fn symbol(self: @ContractState) -> felt252 {
+            self.symbol.read()
+        }
+
+        fn decimals(self: @ContractState) -> u8 {
+            self.decimals.read()
+        }
+
+        fn totalSupply(self: @ContractState) -> u256 {
+            self.totalSupply.read()
+        }
+
+        fn balanceOf(self: @ContractState, owner: ContractAddress) -> u256 {
+            self.balances.read(owner)
+        }
+
+        fn allowance(
+            self: @ContractState, owner: ContractAddress, spender: ContractAddress
+        ) -> u256 {
+            self.allowances.read((owner, spender))
+        }
+
+        fn transfer(ref self: ContractState, to: ContractAddress, value: u256) -> bool {
+            let msg_sender = get_caller_address();
+            self._transfer(msg_sender, to, value)
+        }
+
+        fn transferFrom(
+            ref self: ContractState, from: ContractAddress, to: ContractAddress, value: u256
+        ) -> bool {
+            let msg_sender = get_caller_address();
+            let allowance = self.allowance(from, msg_sender);
+            assert(allowance >= value, 'Insufficient allowance');
+            self._transfer(from, to, value);
+            self.allowances.write((from, msg_sender), allowance - value);
             true
-        }                                                                  
+        }
+
+        fn approve(ref self: ContractState, spender: ContractAddress, value: u256) -> bool {
+            let msg_sender = get_caller_address();
+            self.allowances.write((msg_sender, spender), value);
+            self.emit(Approval { owner: msg_sender, spender: spender, value: value, });
+            true
+        }
+
+        // mint
+        fn mint(ref self: ContractState, to: ContractAddress, value: u256) {
+            let total_supply = self.totalSupply.read();
+            self.totalSupply.write(total_supply + value);
+            let balance = self.balances.read(to);
+            self.balances.write(to, balance + value);
+            self.emit(Mint { to: to, value: value, });
+        }
+
+        // burn
+        fn burn(ref self: ContractState, from: ContractAddress, value: u256) {
+            let balance = self.balances.read(from);
+            assert(balance >= value, 'Insufficient balance');
+            self.balances.write(from, balance - value);
+            let total_supply = self.totalSupply.read();
+            self.totalSupply.write(total_supply - value);
+            self.emit(Burn { from: from, value: value, });
+        }
+                                                                       
     }
 
     
@@ -301,6 +405,21 @@ use starknet:: get_block_timestamp;
             self.vehicleCategories.write('luxury', 150);
             self.vehicleCategories.write('sports', 200);
         
+        }
+
+        fn _transfer(
+            ref self: ContractState, from: ContractAddress, to: ContractAddress, value: u256
+        ) -> bool {
+            let address_zero: ContractAddress = contract_address_const::<0>();
+            assert(from != address_zero, 'From address is zero');
+            assert(to != address_zero, 'To address is zero');
+            assert(value > 0, 'Value must be greater than zero');
+            assert(self.balances.read(from) >= value, 'Insufficient balance');
+
+            self.balances.write(from, self.balances.read(from) - value);
+            self.balances.write(to, self.balances.read(to) + value);
+            self.emit(Transfer { from, to, value });
+            true
         }
     }
    
