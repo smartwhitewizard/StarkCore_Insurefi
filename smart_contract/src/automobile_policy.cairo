@@ -3,23 +3,43 @@ use starknet::ContractAddress;
 #[starknet::interface]
 pub trait Iautomobile_insurance<T> {
     fn register_vehicle(ref self: T, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool;
-    fn calculate_premium(ref self: T, policy_id: u8) -> u32;
+    fn generate_premium(ref self: T, policy_id: u8) -> u32;
+    fn initiate_policy(ref self: T, policy_id: u8) -> bool;
     fn get_owner(self: @T) -> ContractAddress;
     fn get_specific_vehicle(self: @T, id: u8) -> Automobile_calculator::Vehicle;
     fn get_specific_vehiclea(self: @T, id: u8) -> u8;
+    // Function to get the balance of an account
+    fn balanceOf(self: @T,address: ContractAddress) -> u64;
+
+    // Function to transfer tokens
+    fn transfer(ref self:T,to: ContractAddress, amount: u64) -> bool;
+}
+
+#[starknet::interface]
+pub trait IERC20Camel<TState> {
+    fn totalSupply(self: @TState) -> u256;
+    fn balanceOf(self: @TState, account: ContractAddress) -> u256;
+    fn allowance(self: @TState, owner: ContractAddress, spender: ContractAddress) -> u256;
+    fn transfer(ref self: TState, recipient: ContractAddress, amount: u256) -> bool;
+    fn transferFrom(
+        ref self: TState, sender: ContractAddress, recipient: ContractAddress, amount: u256
+    ) -> bool;
+    fn approve(ref self: TState, spender: ContractAddress, amount: u256) -> bool;
 }
 
 #[starknet::contract]
 pub mod Automobile_calculator {
-    use core::option::OptionTrait;
+use core::option::OptionTrait;
 use core::traits::Into;
 use core::starknet::event::EventEmitter;
 use super::ContractAddress;
 use starknet::get_caller_address;
+use starknet:: get_block_timestamp;
 
     #[storage]
     struct Storage {
         policies: LegacyMap<u8, Vehicle>,
+        voters: Array<ContractAddress>,
         vehicle_owner: LegacyMap<ContractAddress, Vehicle>,
         policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
@@ -51,13 +71,14 @@ use starknet::get_caller_address;
         driver: ContractAddress,
         insured: bool,
         premium: u32,
-        policy_creation_date: u16,
-        policy_termination_date: u16,
-        policy_last_payment_date: u16,
+        policy_creation_date: u64,
+        policy_termination_date: u64,
+        policy_last_payment_date: u64,
         policy_is_active:bool,
         policy_holder: ContractAddress,
         claim_status: bool,
-        img_url:felt252
+        img_url:felt252,
+        voting_power: bool
 
     }
     #[derive(Drop, Serde, starknet::Store)]
@@ -97,7 +118,7 @@ use starknet::get_caller_address;
             let sf = self.safetyFeatureAdjustments.read(safety_features);
             let cv = self.coverageTypeMultipliers.read(coverage_type);
 
-            let vehicle_data = Vehicle { id: id, driver: driver, driver_age: driver_age, no_of_accidents: no_of_accidents, violations: violations, vehicle_age: vehicle_age, milage:mileage, vehicle_Category: vc, safety_features: sf, coverage_type:cv, value: value, insured: false, premium: 0, policy_creation_date: 0, policy_termination_date: 0, policy_last_payment_date: 0, policy_is_active:false, policy_holder:driver, claim_status: false, img_url: 'Blank'};
+            let vehicle_data = Vehicle { id: id, driver: driver, driver_age: driver_age, no_of_accidents: no_of_accidents, violations: violations, vehicle_age: vehicle_age, milage:mileage, vehicle_Category: vc, safety_features: sf, coverage_type:cv, value: value, insured: false, premium: 0, policy_creation_date: 0, policy_termination_date: 0, policy_last_payment_date: 0, policy_is_active:false, policy_holder:driver, claim_status: false, img_url: 'Blank', voting_power: false};
 
             self.policies.write(id, vehicle_data);
             self.policy_id_counter.write(id);
@@ -114,7 +135,7 @@ use starknet::get_caller_address;
             vehicle.id
         }
 
-        fn calculate_premium(ref self: ContractState, policy_id: u8) -> u32 {
+        fn generate_premium(ref self: ContractState, policy_id: u8) -> u32 {
             let mut newPolicy = self.policies.read(policy_id);
 
             let  category = newPolicy.vehicle_Category;
@@ -185,14 +206,57 @@ use starknet::get_caller_address;
 
             let premium = (premium2 * newPolicy.coverage_type.into()) / 1000;
 
+            newPolicy.premium = premium;
+            
+            self.policies.write(newPolicy.id, newPolicy);
+
             return premium * 100;           
+        }
+
+        // INITIATE POLICY
+
+        fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
+            let mut generated_policy = self.policies.read(policy_id);
+            let active = generated_policy.policy_is_active;
+            assert(!active, 'Policy is already active');
+
+            /////////////////////////////////////////////////
+            //  I NEED TO ACCEPT PAYMETS IN THIS FUNCTION  //
+            ////////////////////////////////////////////////
+            
+           generated_policy.policy_is_active = true;
+           generated_policy.voting_power = true;
+
+           generated_policy.policy_creation_date = get_block_timestamp();
+           generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
+           generated_policy.policy_last_payment_date = get_block_timestamp();
+
+
+            self.policies.write(generated_policy.id, generated_policy);
+            true
         }
 
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
-                                                                                
+
+
+        
+        fn balanceOf( self: @ContractState,  address: ContractAddress) -> u64 {
+            // let dispatcher = Dispatcher::new(token_address);
+            // ERC20::balanceOf(dispatcher, user_address)
+
+            25
+        }
+    
+        // Function to transfer tokens
+        
+        fn transfer( ref self: ContractState, to: ContractAddress, amount: u64) -> bool {
+            // let dispatcher = Dispatcher::new(token_address);
+            // ERC20::transfer(dispatcher, to, amount)
+            true
+        }                                                                  
     }
 
     

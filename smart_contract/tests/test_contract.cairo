@@ -49,7 +49,7 @@ fn test_for_vehicle_registration() {
 
     assert(vehicle, 'Did not registered');
 
-    let premium = dispatcher.calculate_premium(1);
+    let premium = dispatcher.generate_premium(1);
 
     let pre = premium == 67500;
 
@@ -72,7 +72,7 @@ fn test_for_vehicle_registration() {
 
     assert(vehicle1, 'Did not registered');
 
-    let premium1 = dispatcher.calculate_premium(2);
+    let premium1 = dispatcher.generate_premium(2);
 
     let pre1 = premium1 == 67500;
 
