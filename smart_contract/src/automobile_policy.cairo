@@ -5,10 +5,12 @@ pub trait Iautomobile_insurance<T> {
     fn register_vehicle(ref self: T, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool;
     fn generate_premium(ref self: T, policy_id: u8) -> u32;
     fn initiate_policy(ref self: T, policy_id: u8) -> bool;
+    fn renew_policy(ref self: T, policy_id: u8) -> bool;
     fn get_owner(self: @T) -> ContractAddress;
     fn get_specific_vehicle(self: @T, id: u8) -> Automobile_calculator::Vehicle;
     fn get_specific_vehiclea(self: @T, id: u8) -> u8;
     fn get_specific_driver(self: @T, id: u8) -> ContractAddress;
+    fn file_claim(ref self:T, id:u8, claim_amount: u256, claim_details: ByteArray, image: ByteArray) -> bool ;
 
 
     fn name(self: @T) -> felt252;
@@ -42,10 +44,12 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
     #[storage]
     struct Storage {
         policies: LegacyMap<u8, Vehicle>,
-        // voters: Array<ContractAddress>,
+        claims: LegacyMap<u8, Claim>,
+        voters_count: u16,
         vehicle_owner: LegacyMap<ContractAddress, Vehicle>,
         policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
+        claimid:u8,
         owner: ContractAddress,
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
@@ -94,10 +98,11 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
     pub struct Claim {
         id: u8,
         policy_holder: ContractAddress,
-        claim_amount: u8,
+        claim_amount: u256,
         claim_details: ByteArray,
         claim_status: ClaimStatus,
-        accident_image: felt252      
+        accident_image: ByteArray,
+        claim_vote: u32      
 
     }
 
@@ -279,16 +284,18 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             let bal = self.balanceOf(generated_policy.driver);
             let contract_Address = get_contract_address();
             assert(bal >= generated_policy.premium.into(), 'Insufficient balance');
-            self.approve(contract_Address, generated_policy.premium.into());
             self.transfer(contract_Address, generated_policy.premium.into());
 
          
             
            generated_policy.policy_is_active = true;
            generated_policy.voting_power = true;
+          
+          let voting =  self.voters_count.read() + 1;
+          self.voters_count.write(voting);
 
            generated_policy.policy_creation_date = get_block_timestamp();
-           generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
+           generated_policy.policy_termination_date = get_block_timestamp() + 60; 
            generated_policy.policy_last_payment_date = get_block_timestamp();
 
 
@@ -296,6 +303,61 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             true
         }
 
+        
+
+        fn file_claim(ref self:ContractState, id:u8, claim_amount: u256, claim_details: ByteArray, image: ByteArray) -> bool {
+            self.is_expired(id);
+            let mut generated_policy = self.policies.read(id);
+            let active = generated_policy.policy_is_active;
+            assert(active, 'Policy is not active');
+            generated_policy.policy_is_active = false;
+            let bal = self.balanceOf(generated_policy.driver);
+            assert(bal >= claim_amount.into(), 'Insufficient balance');
+            
+            let claim_id = self.claimid.read();
+            
+            let claim = Claim {id: claim_id, policy_holder: generated_policy.driver, claim_amount: claim_amount, claim_details: claim_details, claim_status: ClaimStatus::Processing, accident_image: image , claim_vote: 1 };
+            self.claims.write(claim_id, claim);
+            self.claimid.write(claim_id + 1);
+
+            true
+        }
+
+            // RENEW POLICY
+        fn renew_policy (ref self: ContractState, policy_id:u8) -> bool{
+            self.is_expired(policy_id);
+            let mut generated_policy = self.policies.read(policy_id);
+
+            let expirydate = generated_policy.policy_termination_date;
+            let now = get_block_timestamp();
+
+            let check = now > expirydate;
+
+            assert(check, 'Policy is yet to expire');
+
+
+
+            let bal = self.balanceOf(generated_policy.driver);
+            let contract_Address = get_contract_address();
+            assert(bal >= generated_policy.premium.into(), 'Insufficient balance');
+            self.transfer(contract_Address, generated_policy.premium.into());
+
+         
+            
+           generated_policy.policy_is_active = true;
+           generated_policy.voting_power = true;
+          
+          let voting =  self.voters_count.read() + 1;
+          self.voters_count.write(voting);
+
+           generated_policy.policy_creation_date = get_block_timestamp();
+           generated_policy.policy_termination_date = get_block_timestamp() + 60; 
+           generated_policy.policy_last_payment_date = get_block_timestamp();
+
+
+            self.policies.write(generated_policy.id, generated_policy);
+            true
+        }
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
@@ -419,6 +481,24 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             self.vehicleCategories.write('luxury', 150);
             self.vehicleCategories.write('sports', 200);
         
+        }
+
+        fn is_expired(ref self: ContractState, id: u8) -> bool{
+            let mut generated_policy = self.policies.read(id);
+            let expirydate = generated_policy.policy_termination_date;
+            let now = get_block_timestamp();
+            let check = now > expirydate;
+
+            if(check){
+                generated_policy.policy_is_active = false;
+            }
+            else{
+                generated_policy.policy_is_active = true;
+            }
+
+            self.policies.write(id, generated_policy);            
+            
+            true
         }
 
         fn _transfer(
