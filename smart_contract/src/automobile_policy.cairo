@@ -4,10 +4,11 @@ use starknet::ContractAddress;
 pub trait Iautomobile_insurance<T> {
     fn register_vehicle(ref self: T, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool;
     fn generate_premium(ref self: T, policy_id: u8) -> u32;
-    // fn initiate_policy(ref self: T, policy_id: u8) -> bool;
+    fn initiate_policy(ref self: T, policy_id: u8) -> bool;
     fn get_owner(self: @T) -> ContractAddress;
     fn get_specific_vehicle(self: @T, id: u8) -> Automobile_calculator::Vehicle;
     fn get_specific_vehiclea(self: @T, id: u8) -> u8;
+    fn get_specific_driver(self: @T, id: u8) -> ContractAddress;
 
 
     fn name(self: @T) -> felt252;
@@ -31,11 +32,12 @@ pub trait Iautomobile_insurance<T> {
 
 #[starknet::contract]
 pub mod Automobile_calculator {
+use smart_contract::automobile_policy::Iautomobile_insurance;
 use core::option::OptionTrait;
 use core::traits::Into;
 use core::starknet::event::EventEmitter;
 use super::ContractAddress;
-use starknet:: {get_block_timestamp, contract_address_const, get_caller_address};
+use starknet:: {get_block_timestamp, contract_address_const, get_caller_address, get_contract_address};
 
     #[storage]
     struct Storage {
@@ -185,6 +187,11 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address}
             vehicle.id
         }
 
+        fn get_specific_driver(self: @ContractState, id: u8) -> ContractAddress {
+            let vehicle = self.policies.read(id);
+            vehicle.driver
+        }
+
         fn generate_premium(ref self: ContractState, policy_id: u8) -> u32 {
             let mut newPolicy = self.policies.read(policy_id);
 
@@ -265,26 +272,29 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address}
 
         // INITIATE POLICY
 
-        // fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
-        //     let mut generated_policy = self.policies.read(policy_id);
-        //     let active = generated_policy.policy_is_active;
-        //     assert(!active, 'Policy is already active');
+        fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
+            let mut generated_policy = self.policies.read(policy_id);
+            let active = generated_policy.policy_is_active;
+            assert(!active, 'Policy is already active');
+            let bal = self.balanceOf(generated_policy.driver);
+            let contract_Address = get_contract_address();
+            assert(bal >= generated_policy.premium.into(), 'Insufficient balance');
+            self.approve(contract_Address, generated_policy.premium.into());
+            self.transfer(contract_Address, generated_policy.premium.into());
 
-        //     /////////////////////////////////////////////////
-        //     //  I NEED TO ACCEPT PAYMETS IN THIS FUNCTION  //
-        //     ////////////////////////////////////////////////
+         
             
-        //    generated_policy.policy_is_active = true;
-        //    generated_policy.voting_power = true;
+           generated_policy.policy_is_active = true;
+           generated_policy.voting_power = true;
 
-        //    generated_policy.policy_creation_date = get_block_timestamp();
-        //    generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
-        //    generated_policy.policy_last_payment_date = get_block_timestamp();
+           generated_policy.policy_creation_date = get_block_timestamp();
+           generated_policy.policy_termination_date = get_block_timestamp() + 31536000; 
+           generated_policy.policy_last_payment_date = get_block_timestamp();
 
 
-        //     self.policies.write(generated_policy.id, generated_policy);
-        //     true
-        // }
+            self.policies.write(generated_policy.id, generated_policy);
+            true
+        }
 
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
@@ -292,6 +302,10 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address}
         }
 
 
+
+                        ///////////////////////////////////
+                        /// THE CONTRACT IS ALSO ERC20 ///
+                        /// /////////////////////////////
         
         fn name(self: @ContractState) -> felt252 {
             self.name.read()
@@ -426,5 +440,3 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address}
 }
 
 
-// Car 1 675
-// Car 2 

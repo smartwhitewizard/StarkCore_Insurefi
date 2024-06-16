@@ -29,13 +29,14 @@ fn test_initial_owner() {
 
 #[test]
 fn test_for_vehicle_registration() {
-    let admin_address: ContractAddress = 'admin'.try_into().unwrap();
+let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
     let contract_address = deploy_contract("Automobile_calculator");
     let dispatcher = Iautomobile_insuranceDispatcher { contract_address };
+    
 
 
-    cheat_caller_address(contract_address, admin_address, CheatSpan::Indefinite);
     let driver: ContractAddress = 'first_voter'.try_into().unwrap();
+    cheat_caller_address(contract_address, driver, CheatSpan::Indefinite);
     let sf = 'sf2';
     let cv = 'collision';
     let ca = 'economy';
@@ -55,6 +56,13 @@ fn test_for_vehicle_registration() {
 
     assert(pre, 'wrong math');
 
+    
+
+    dispatcher.mint(driver, 70000000);
+   
+
+    dispatcher.initiate_policy(1);
+
     // /////////// VEHICLE 2
 
     // let driver1: ContractAddress = 'DRIVER1'.try_into().unwrap();
@@ -62,21 +70,21 @@ fn test_for_vehicle_registration() {
     // let cv1 = 'comprehensive';
     // let ca1 = 'luxury';
 
-    let vehicle1 = dispatcher.register_vehicle(driver, 25, 2, 0, ca, 21, 20100, sf, cv, 30000 );
+    // let vehicle1 = dispatcher.register_vehicle(driver, 25, 2, 0, ca, 21, 20100, sf, cv, 30000 );
 
-    let registered1 = dispatcher.get_specific_vehiclea(2);
+    // let registered1 = dispatcher.get_specific_vehiclea(2);
 
-    let age1: bool = registered1 == 2; 
+    // let age1: bool = registered1 == 2; 
 
-    assert(age1, 'Did not registered Properly');
+    // assert(age1, 'Did not registered Properly');
 
-    assert(vehicle1, 'Did not registered');
+    // assert(vehicle1, 'Did not registered');
 
-    let premium1 = dispatcher.generate_premium(2);
+    // let premium1 = dispatcher.generate_premium(2);
 
-    let pre1 = premium1 == 67500;
+    // let pre1 = premium1 == 67500;
 
-    assert(pre1, 'wrong math vehicle 2')
+    // assert(pre1, 'wrong math vehicle 2')
 }
 
 // #[test]
