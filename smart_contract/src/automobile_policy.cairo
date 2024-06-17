@@ -18,8 +18,9 @@ pub mod Automobile_calculator {
         policy_renewal_event::Policy_renewed
     };
 
-    use smart_contract::constants::{vehicle_request::Vehicle_Request, claim_status::ClaimStatus};
-    use smart_contract::constants::vehicle::Vehicle;
+    use smart_contract::constants::{
+        vehicle_request::Vehicle_Request, claim_status::ClaimStatus, vehicle::Vehicle, claim::Claim
+    };
 
     #[storage]
     struct Storage {
@@ -40,17 +41,6 @@ pub mod Automobile_calculator {
         totalSupply: u256,
         balances: LegacyMap::<ContractAddress, u256>,
         allowances: LegacyMap::<(ContractAddress, ContractAddress), u256>,
-    }
-
-    #[derive(Drop, Serde, starknet::Store)]
-    pub struct Claim {
-        id: u8,
-        policy_holder: ContractAddress,
-        claim_amount: u256,
-        claim_details: ByteArray,
-        claim_status: ClaimStatus,
-        accident_image: ByteArray,
-        claim_vote: u32
     }
 
     #[derive(Drop, Serde, starknet::Store)]
