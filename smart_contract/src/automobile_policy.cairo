@@ -1,45 +1,33 @@
 use starknet::ContractAddress;
+use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
+use smart_contract::events::policy_initiated::Policy_initiated;
 
-#[starknet::interface]
-pub trait Iautomobile_insurance<T> {
-    fn register_vehicle(ref self: T, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool;
-    fn generate_premium(ref self: T, policy_id: u8) -> u32;
-    fn initiate_policy(ref self: T, policy_id: u8) -> bool;
-    fn renew_policy(ref self: T, policy_id: u8) -> bool;
-    fn get_owner(self: @T) -> ContractAddress;
-    fn get_specific_vehicle(self: @T, id: u8) -> Automobile_calculator::Vehicle;
-    fn get_specific_vehiclea(self: @T, id: u8) -> u8;
-    fn get_specific_driver(self: @T, id: u8) -> ContractAddress;
-    fn file_claim(ref self:T, id:u8, claim_amount: u256, claim_details: ByteArray, image: ByteArray) -> bool ;
-
-
-    fn name(self: @T) -> felt252;
-    fn symbol(self: @T) -> felt252;
-    fn decimals(self: @T) -> u8;
-    fn totalSupply(self: @T) -> u256;
-    fn balanceOf(self: @T, owner: ContractAddress) -> u256;
-
-    fn transfer(ref self: T, to: ContractAddress, value: u256) -> bool;
-    fn transferFrom(
-        ref self: T, from: ContractAddress, to: ContractAddress, value: u256
-    ) -> bool;
-    fn approve(ref self: T, spender: ContractAddress, value: u256) -> bool;
-    fn allowance(self: @T, owner: ContractAddress, spender: ContractAddress) -> u256;
-
-    // Mint and Burn
-    fn mint(ref self: T, to: ContractAddress, value: u256);
-    fn burn(ref self: T, from: ContractAddress, value: u256);
-   
+#[derive(Drop, Copy, Serde)]
+pub struct Vehicle_Request{
+    pub driver: ContractAddress,
+    pub driver_age: u8,
+    pub no_of_accidents: u8,
+    pub violations: u8,
+    pub vehicle_category: felt252,
+    pub vehicle_age: u8,
+    pub mileage: u32,
+    pub safety_features: felt252,
+    pub coverage_type: felt252,
+    pub value: i32
 }
 
 #[starknet::contract]
 pub mod Automobile_calculator {
-use smart_contract::automobile_policy::Iautomobile_insurance;
-use core::option::OptionTrait;
-use core::traits::Into;
-use core::starknet::event::EventEmitter;
-use super::ContractAddress;
-use starknet:: {get_block_timestamp, contract_address_const, get_caller_address, get_contract_address};
+    use core::clone::Clone;
+    // use smart_contract::automobile_policy::Iautomobile_insurance;
+    use core::option::OptionTrait;
+    use core::traits::Into;
+    use core::starknet::event::EventEmitter;
+    use super::ContractAddress;
+    use starknet::{
+        get_block_timestamp, contract_address_const, get_caller_address, get_contract_address
+    };
+    use super::Vehicle_Request;
 
     #[storage]
     struct Storage {
@@ -49,7 +37,7 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         vehicle_owner: LegacyMap<ContractAddress, Vehicle>,
         policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
-        claimid:u8,
+        claimid: u8,
         owner: ContractAddress,
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
@@ -62,14 +50,14 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         allowances: LegacyMap::<(ContractAddress, ContractAddress), u256>,
     }
 
-    #[derive(Drop,Serde, starknet::Store)]
+    #[derive(Drop, Serde, starknet::Store)]
     pub enum ClaimStatus {
         Claimed,
         Processing,
         Denied,
     }
 
-    #[derive(Drop, Serde, starknet::Store)]
+    #[derive(Drop, Copy, Serde, Clone, starknet::Store)]
     pub struct Vehicle {
         id: u8,
         driver_age: u8,
@@ -87,12 +75,11 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         policy_creation_date: u64,
         policy_termination_date: u64,
         policy_last_payment_date: u64,
-        policy_is_active:bool,
+        policy_is_active: bool,
         policy_holder: ContractAddress,
         claim_status: bool,
-        img_url:felt252,
+        img_url: felt252,
         voting_power: bool
-
     }
     #[derive(Drop, Serde, starknet::Store)]
     pub struct Claim {
@@ -102,15 +89,14 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         claim_details: ByteArray,
         claim_status: ClaimStatus,
         accident_image: ByteArray,
-        claim_vote: u32      
-
+        claim_vote: u32
     }
 
     #[derive(Drop, Serde, starknet::Store)]
-   pub trait Processing {
+    pub trait Processing {
         fn process(self: ClaimStatus);
     }
-    
+
     // Events
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -119,12 +105,27 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         Approval: Approval,
         Mint: Mint,
         Burn: Burn,
+        Policy_initiated: super::Policy_initiated,
+        Policy_renewed: Policy_renewed,
+        TransferFrom: TransferFrom,
     }
 
     #[derive(Drop, starknet::Event)]
     struct Transfer {
         #[key]
         from: ContractAddress,
+        #[key]
+        to: ContractAddress,
+        value: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct TransferFrom {
+        #[key]
+        from: ContractAddress,
+        #[key]
+        initiator: ContractAddress,
+        #[key]
         to: ContractAddress,
         value: u256,
     }
@@ -133,6 +134,7 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
     struct Approval {
         #[key]
         owner: ContractAddress,
+        #[key]
         spender: ContractAddress,
         value: u256,
     }
@@ -151,34 +153,73 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         value: u256,
     }
 
-   
+    // #[derive(Drop, starknet::Event)]
+    // struct Policy_initiated {
+    //     #[key]
+    //     policy_id: u8,
+    //     #[key]
+    //     policy_holder: ContractAddress,
+    // }
 
-    
+    #[derive(Drop, starknet::Event)]
+    struct Policy_renewed {
+        #[key]
+        policy_id: u128,
+        #[key]
+        policy_holder: ContractAddress,
+    }
+
 
     #[constructor]
     fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
         self.owner.write(initial_owner);
-         self.set_categories();
-         self.name.write('INSUREFI');
+        self.set_categories();
+        self.name.write('INSUREFI');
         self.symbol.write('IFI');
         self.decimals.write(18);
     }
 
-
     #[abi(embed_v0)]
-    impl Automobile_insuranceImpl of super::Iautomobile_insurance<ContractState> {
+    impl Automobile_insuranceImpl of super::I_automobile_insurance<ContractState> {
         // register vehicle
-        fn register_vehicle(ref self: ContractState, driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) -> bool {
+        fn register_vehicle(
+            ref self: ContractState, vehicle_request: Vehicle_Request
+        ) -> bool {
             let id = self.policy_id_counter.read() + 1;
+            //driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) 
+            
+            let vc = self.vehicleCategories.read(vehicle_request.vehicle_category);
+            let sf = self.safetyFeatureAdjustments.read(vehicle_request.safety_features);
+            let cv = self.coverageTypeMultipliers.read(vehicle_request.coverage_type);
 
-            let vc = self.vehicleCategories.read(vehicle_category);
-            let sf = self.safetyFeatureAdjustments.read(safety_features);
-            let cv = self.coverageTypeMultipliers.read(coverage_type);
-
-            let vehicle_data = Vehicle { id: id, driver: driver, driver_age: driver_age, no_of_accidents: no_of_accidents, violations: violations, vehicle_age: vehicle_age, milage:mileage, vehicle_Category: vc, safety_features: sf, coverage_type:cv, value: value, insured: false, premium: 0, policy_creation_date: 0, policy_termination_date: 0, policy_last_payment_date: 0, policy_is_active:false, policy_holder:driver, claim_status: false, img_url: 'Blank', voting_power: false};
+            let vehicle_data: Vehicle = Vehicle {
+                id: id,
+                driver: vehicle_request.driver,
+                driver_age: vehicle_request.driver_age,
+                no_of_accidents: vehicle_request.no_of_accidents,
+                violations: vehicle_request.violations,
+                vehicle_age: vehicle_request.vehicle_age,
+                milage: vehicle_request.mileage,
+                vehicle_Category: vc,
+                safety_features: sf,
+                coverage_type: cv,
+                value: vehicle_request.value,
+                insured: false,
+                premium: 0,
+                policy_creation_date: 0,
+                policy_termination_date: 0,
+                policy_last_payment_date: 0,
+                policy_is_active: false,
+                policy_holder: vehicle_request.driver,
+                claim_status: false,
+                img_url: 'Blank',
+                voting_power: false
+            };
 
             self.policies.write(id, vehicle_data);
             self.policy_id_counter.write(id);
+            self.emit(super::Policy_initiated { policy_id: id, policy_holder: vehicle_request.driver });
+
             true
         }
 
@@ -200,7 +241,7 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         fn generate_premium(ref self: ContractState, policy_id: u8) -> u32 {
             let mut newPolicy = self.policies.read(policy_id);
 
-            let  category = newPolicy.vehicle_Category;
+            let category = newPolicy.vehicle_Category;
 
             let mut vehicle_risk = 0;
             let mut new_vehicle_risk = 0;
@@ -208,34 +249,30 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             let mut final_vehicle_risk = 0;
 
             // Using Category
-            if (category > 140){
+            if (category > 140) {
                 new_vehicle_risk = category + 10;
-            }
-            else {
-                 new_vehicle_risk = category - 5;
+            } else {
+                new_vehicle_risk = category - 5;
             }
 
             // Using Milage
-            if(newPolicy.milage > 20000){
+            if (newPolicy.milage > 20000) {
                 neww_risk = new_vehicle_risk + 5;
-            }
-            else{
+            } else {
                 neww_risk = new_vehicle_risk;
             }
 
             // Using Age
 
-            if(newPolicy.vehicle_age > 20){
+            if (newPolicy.vehicle_age > 20) {
                 vehicle_risk = neww_risk + 10;
-            }
-            else{
+            } else {
                 vehicle_risk = neww_risk - 5;
             }
 
             // Finally adding Saftey Features
 
             final_vehicle_risk = vehicle_risk + newPolicy.safety_features;
-
 
             // drivers_risk_adjustment
             let mut drivers_risk_adjustment: i32 = 0;
@@ -244,10 +281,9 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             let mut driver_final: i32 = 0;
 
             //  Using Age
-            if(newPolicy.driver_age < 25 || newPolicy.driver_age > 65){
+            if (newPolicy.driver_age < 25 || newPolicy.driver_age > 65) {
                 drivers_risk_adjustment = new_driver_risk + 20;
-            }
-            else{
+            } else {
                 drivers_risk_adjustment = new_driver_risk - 10;
             }
 
@@ -255,12 +291,11 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             driver_ris = drivers_risk_adjustment + (newPolicy.no_of_accidents.into() * 15);
 
             // Using violations
-            driver_final =  driver_ris + (newPolicy.violations.into() * 10);
-            
+            driver_final = driver_ris + (newPolicy.violations.into() * 10);
+
             ////////////////////////////////////////////////////////////////////////
             //                      CALCULATING PREMIUM
             /// //////////////////////////////////////////////////////////////////
-            
 
             let premium3 = (100 + driver_final + final_vehicle_risk.into());
 
@@ -269,94 +304,121 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             let premium = (premium2 * newPolicy.coverage_type.into()) / 1000;
 
             newPolicy.premium = premium;
-            
+
             self.policies.write(newPolicy.id, newPolicy);
 
-            return premium * 100;           
+            return premium * 100;
         }
 
         // INITIATE POLICY
 
-        fn initiate_policy (ref self: ContractState, policy_id:u8) -> bool{
-            let mut generated_policy = self.policies.read(policy_id);
-            let active = generated_policy.policy_is_active;
+        fn initiate_policy(ref self: ContractState, policy_id: u8) -> bool {
+            let mut generated_vehicle_policy = self.policies.read(policy_id);
+            let active = generated_vehicle_policy.policy_is_active;
             assert(!active, 'Policy is already active');
-            let bal = self.balanceOf(generated_policy.driver);
+            let bal = self.balanceOf(generated_vehicle_policy.driver);
             let contract_Address = get_contract_address();
-            assert(bal >= generated_policy.premium.into(), 'Insufficient balance');
-            self.transfer(contract_Address, generated_policy.premium.into());
+            assert(bal >= generated_vehicle_policy.premium.into(), 'Insufficient balance');
+            self.transfer(contract_Address, generated_vehicle_policy.premium.into());
 
-         
-            
-           generated_policy.policy_is_active = true;
-           generated_policy.voting_power = true;
-          
-          let voting =  self.voters_count.read() + 1;
-          self.voters_count.write(voting);
+            generated_vehicle_policy.policy_is_active = true;
+            generated_vehicle_policy.voting_power = true;
 
-           generated_policy.policy_creation_date = get_block_timestamp();
-           generated_policy.policy_termination_date = get_block_timestamp() + 60; 
-           generated_policy.policy_last_payment_date = get_block_timestamp();
+            let voting = self.voters_count.read() + 1;
+            self.voters_count.write(voting);
 
+            generated_vehicle_policy.policy_creation_date = get_block_timestamp();
+            generated_vehicle_policy.policy_termination_date = get_block_timestamp() + 60;
+            generated_vehicle_policy.policy_last_payment_date = get_block_timestamp();
 
-            self.policies.write(generated_policy.id, generated_policy);
+            self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
+
+            self
+                .emit(
+                    Policy_renewed {
+                        policy_id: generated_vehicle_policy.id.into(),
+                        policy_holder: generated_vehicle_policy.driver
+                    }
+                );
             true
         }
 
-        
 
-        fn file_claim(ref self:ContractState, id:u8, claim_amount: u256, claim_details: ByteArray, image: ByteArray) -> bool {
-            self.is_expired(id);
-            let mut generated_policy = self.policies.read(id);
-            let active = generated_policy.policy_is_active;
+        fn file_claim(
+            ref self: ContractState,
+            id: u8,
+            claim_amount: u256,
+            claim_details: ByteArray,
+            image: ByteArray
+        ) -> bool {
+            // self.is_expired(id);
+
+            let active = self.is_expired(id);
             assert(active, 'Policy is not active');
-            generated_policy.policy_is_active = false;
-            let bal = self.balanceOf(generated_policy.driver);
+            let mut generated_vehicle_policy = self.policies.read(id);
+            generated_vehicle_policy.policy_is_active = false;
+            let bal = self.balanceOf(generated_vehicle_policy.driver);
+
             assert(bal >= claim_amount.into(), 'Insufficient balance');
-            
+
             let claim_id = self.claimid.read();
-            
-            let claim = Claim {id: claim_id, policy_holder: generated_policy.driver, claim_amount: claim_amount, claim_details: claim_details, claim_status: ClaimStatus::Processing, accident_image: image , claim_vote: 1 };
+
+            let claim: Claim = Claim {
+                id: claim_id,
+                policy_holder: generated_vehicle_policy.driver,
+                claim_amount: claim_amount,
+                claim_details: claim_details,
+                claim_status: ClaimStatus::Processing,
+                accident_image: image,
+                claim_vote: 1
+            };
             self.claims.write(claim_id, claim);
             self.claimid.write(claim_id + 1);
 
             true
         }
 
-            // RENEW POLICY
-        fn renew_policy (ref self: ContractState, policy_id:u8) -> bool{
-            self.is_expired(policy_id);
-            let mut generated_policy = self.policies.read(policy_id);
+        // RENEW POLICY
+        fn renew_policy(ref self: ContractState, policy_id: u8) -> bool {
+            let is_expired: bool = self.is_expired(policy_id);
 
-            let expirydate = generated_policy.policy_termination_date;
-            let now = get_block_timestamp();
+            assert(is_expired, 'Policy is yet to expire');
 
-            let check = now > expirydate;
-
-            assert(check, 'Policy is yet to expire');
-
-
-
-            let bal = self.balanceOf(generated_policy.driver);
+            let mut generated_vehicle_policy = self.policies.read(policy_id);
+            let bal = self.balanceOf(generated_vehicle_policy.driver);
             let contract_Address = get_contract_address();
-            assert(bal >= generated_policy.premium.into(), 'Insufficient balance');
-            self.transfer(contract_Address, generated_policy.premium.into());
 
-         
-            
-           generated_policy.policy_is_active = true;
-           generated_policy.voting_power = true;
-          
-          let voting =  self.voters_count.read() + 1;
-          self.voters_count.write(voting);
+            if bal >= generated_vehicle_policy.premium.into() {
+                let has_transferred: bool = self
+                    .transfer(contract_Address, generated_vehicle_policy.premium.into());
 
-           generated_policy.policy_creation_date = get_block_timestamp();
-           generated_policy.policy_termination_date = get_block_timestamp() + 60; 
-           generated_policy.policy_last_payment_date = get_block_timestamp();
+                assert(has_transferred, 'Failed to transfer premium');
 
+                generated_vehicle_policy.policy_is_active = true;
+                generated_vehicle_policy.voting_power = true;
 
-            self.policies.write(generated_policy.id, generated_policy);
-            true
+                let voting = self.voters_count.read() + 1;
+                self.voters_count.write(voting);
+
+                generated_vehicle_policy.policy_creation_date = get_block_timestamp();
+                generated_vehicle_policy.policy_termination_date = get_block_timestamp() + 60;
+                generated_vehicle_policy.policy_last_payment_date = get_block_timestamp();
+
+                self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
+
+                self
+                    .emit(
+                        Policy_renewed {
+                            policy_id: generated_vehicle_policy.id.into(),
+                            policy_holder: generated_vehicle_policy.driver
+                        }
+                    );
+                return true;
+            } else {
+                println!("Insufficient balance");
+                generated_vehicle_policy.policy_is_active = false;
+                return false;
+            }
         }
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
@@ -364,11 +426,10 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
         }
 
 
+        ///////////////////////////////////
+        /// THE CONTRACT IS ALSO ERC20 ///
+        /// /////////////////////////////
 
-                        ///////////////////////////////////
-                        /// THE CONTRACT IS ALSO ERC20 ///
-                        /// /////////////////////////////
-        
         fn name(self: @ContractState) -> felt252 {
             self.name.read()
         }
@@ -397,7 +458,9 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
 
         fn transfer(ref self: ContractState, to: ContractAddress, value: u256) -> bool {
             let msg_sender = get_caller_address();
-            self._transfer(msg_sender, to, value)
+            self._transfer(msg_sender, to, value);
+            self.emit(Transfer { from: msg_sender, to: to, value: value });
+            true
         }
 
         fn transferFrom(
@@ -408,6 +471,7 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             assert(allowance >= value, 'Insufficient allowance');
             self._transfer(from, to, value);
             self.allowances.write((from, msg_sender), allowance - value);
+            self.emit(TransferFrom { from: from, initiator: msg_sender, to: to, value: value });
             true
         }
 
@@ -436,10 +500,9 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             self.totalSupply.write(total_supply - value);
             self.emit(Burn { from: from, value: value, });
         }
-                                                                       
     }
 
-    
+
     impl ProcessingImpl of Processing {
         fn process(self: ClaimStatus) {
             match self {
@@ -457,7 +520,7 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             assert(caller == self.owner.read(), 'Not the owner');
         }
 
-        fn set_categories(ref self: ContractState){
+        fn set_categories(ref self: ContractState) {
             // self.only_owner();
             // Initializes safety feature adjustments.
             self.safetyFeatureAdjustments.write('sf1', -10);
@@ -466,13 +529,13 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             self.safetyFeatureAdjustments.write('sf4', -3);
             self.safetyFeatureAdjustments.write('all', -20);
             self.safetyFeatureAdjustments.write('three', -18);
-    
+
             // // Initializes coverage type multipliers.
             self.coverageTypeMultipliers.write('comprehensive', 150);
             self.coverageTypeMultipliers.write('collision', 100);
             self.coverageTypeMultipliers.write('liability', 100);
             self.coverageTypeMultipliers.write('personalinjury', 120);
-            
+
             // // Initializes vehicle category factors.
             self.vehicleCategories.write('economy', 100);
             self.vehicleCategories.write('mid_range', 120);
@@ -480,25 +543,13 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             self.vehicleCategories.write('commercial', 140);
             self.vehicleCategories.write('luxury', 150);
             self.vehicleCategories.write('sports', 200);
-        
         }
 
-        fn is_expired(ref self: ContractState, id: u8) -> bool{
-            let mut generated_policy = self.policies.read(id);
-            let expirydate = generated_policy.policy_termination_date;
+        fn is_expired(ref self: ContractState, id: u8) -> bool {
+            let mut generated_vehicle_policy = self.policies.read(id);
+            let expirydate = generated_vehicle_policy.policy_termination_date;
             let now = get_block_timestamp();
-            let check = now > expirydate;
-
-            if(check){
-                generated_policy.policy_is_active = false;
-            }
-            else{
-                generated_policy.policy_is_active = true;
-            }
-
-            self.policies.write(id, generated_policy);            
-            
-            true
+            now > expirydate
         }
 
         fn _transfer(
@@ -516,7 +567,5 @@ use starknet:: {get_block_timestamp, contract_address_const, get_caller_address,
             true
         }
     }
-   
 }
-
 
