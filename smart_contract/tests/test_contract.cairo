@@ -2,9 +2,10 @@ use snforge_std::{
     declare, ContractClassTrait, cheat_caller_address, start_cheat_caller_address,
     stop_cheat_caller_address, CheatSpan, spy_events, SpyOn, EventSpy, EventAssertions
 };
-use smart_contract::automobile_policy::Automobile_calculator;
-use smart_contract::automobile_policy::Iautomobile_insuranceDispatcherTrait;
-use smart_contract::automobile_policy::Iautomobile_insuranceDispatcher;
+use smart_contract::automobile_policy::{Automobile_calculator, };
+use smart_contract::constants::{vehicle_request::Vehicle_Request, };
+use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcherTrait;
+use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcher;
 use starknet::ContractAddress;
 use core::traits::TryInto;
 
@@ -20,27 +21,40 @@ fn deploy_contract(name: ByteArray) -> ContractAddress {
 fn test_initial_owner() {
     let admin_address: ContractAddress = 'admin'.try_into().unwrap();
     let contract_address = deploy_contract("Automobile_calculator");
-    let dispatcher = Iautomobile_insuranceDispatcher { contract_address };
+    let dispatcher = I_automobile_insuranceDispatcher { contract_address };
 
     let initial_owner = dispatcher.get_owner();
 
     assert(initial_owner == admin_address, 'incorrect admin');
 }
 
+fn generate_vehicle_request() -> Vehicle_Request {
+    Vehicle_Request {
+        driver: 'first_voter'.try_into().unwrap(),
+        driver_age: 25,
+        no_of_accidents: 2,
+        violations: 0,
+        vehicle_category: 'economy',
+        vehicle_age: 21,
+        mileage: 20100,
+        safety_features: 'sf2',
+        coverage_type: 'collision',
+        value: 30000
+    }
+}
+
 #[test]
 fn test_for_vehicle_registration() {
 let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
     let contract_address = deploy_contract("Automobile_calculator");
-    let dispatcher = Iautomobile_insuranceDispatcher { contract_address };
-    
-
+    let dispatcher = I_automobile_insuranceDispatcher { contract_address };
 
     let driver: ContractAddress = 'first_voter'.try_into().unwrap();
     cheat_caller_address(contract_address, driver, CheatSpan::Indefinite);
-    let sf = 'sf2';
-    let cv = 'collision';
-    let ca = 'economy';
-    let vehicle = dispatcher.register_vehicle(driver, 25, 2, 0, ca, 21, 20100, sf, cv, 30000 );
+
+    let mut vehicle_request = generate_vehicle_request();
+    vehicle_request.driver = driver;
+    let vehicle = dispatcher.register_vehicle(vehicle_request);
 
     let registered = dispatcher.get_specific_vehiclea(1);
 
@@ -62,30 +76,35 @@ let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
    
 
     dispatcher.initiate_policy(1);
-
-    // /////////// VEHICLE 2
-
-    // let driver1: ContractAddress = 'DRIVER1'.try_into().unwrap();
-    // let sf1 = 'all';
-    // let cv1 = 'comprehensive';
-    // let ca1 = 'luxury';
-
-    // let vehicle1 = dispatcher.register_vehicle(driver, 25, 2, 0, ca, 21, 20100, sf, cv, 30000 );
-
-    // let registered1 = dispatcher.get_specific_vehiclea(2);
-
-    // let age1: bool = registered1 == 2; 
-
-    // assert(age1, 'Did not registered Properly');
-
-    // assert(vehicle1, 'Did not registered');
-
-    // let premium1 = dispatcher.generate_premium(2);
-
-    // let pre1 = premium1 == 67500;
-
-    // assert(pre1, 'wrong math vehicle 2')
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // #[test]
 // fn test_for_candidate_registration() {
