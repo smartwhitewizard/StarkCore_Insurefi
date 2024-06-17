@@ -1,5 +1,6 @@
-use smart_contract::automobile_policy::{Automobile_calculator::Vehicle, Vehicle_Request};
+use smart_contract::constants::vehicle::Vehicle;
 use starknet::{ContractAddress};
+use smart_contract::constants::{vehicle_request::Vehicle_Request, claim_status::ClaimStatus};
 
 #[starknet::interface]
 pub trait I_automobile_insurance<T> {

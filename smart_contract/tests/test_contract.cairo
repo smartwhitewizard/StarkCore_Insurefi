@@ -2,7 +2,8 @@ use snforge_std::{
     declare, ContractClassTrait, cheat_caller_address, start_cheat_caller_address,
     stop_cheat_caller_address, CheatSpan, spy_events, SpyOn, EventSpy, EventAssertions
 };
-use smart_contract::automobile_policy::{Automobile_calculator, Vehicle_Request};
+use smart_contract::automobile_policy::{Automobile_calculator, };
+use smart_contract::constants::{vehicle_request::Vehicle_Request, };
 use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcherTrait;
 use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcher;
 use starknet::ContractAddress;

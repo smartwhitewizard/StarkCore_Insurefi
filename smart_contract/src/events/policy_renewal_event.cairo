@@ -1,11 +1,9 @@
-
 use starknet::ContractAddress;
-// use starknet::event::EventEmitter;
 
 #[derive(Drop, starknet::Event)]
-pub struct Policy_initiated {
+pub struct Policy_renewed {
     #[key]
-    pub policy_id: u8,
+    pub policy_id: u128,
     #[key]
     pub policy_holder: ContractAddress,
 }

@@ -1,25 +1,9 @@
 use starknet::ContractAddress;
 use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
-use smart_contract::events::policy_initiated::Policy_initiated;
-
-#[derive(Drop, Copy, Serde)]
-pub struct Vehicle_Request{
-    pub driver: ContractAddress,
-    pub driver_age: u8,
-    pub no_of_accidents: u8,
-    pub violations: u8,
-    pub vehicle_category: felt252,
-    pub vehicle_age: u8,
-    pub mileage: u32,
-    pub safety_features: felt252,
-    pub coverage_type: felt252,
-    pub value: i32
-}
 
 #[starknet::contract]
 pub mod Automobile_calculator {
     use core::clone::Clone;
-    // use smart_contract::automobile_policy::Iautomobile_insurance;
     use core::option::OptionTrait;
     use core::traits::Into;
     use core::starknet::event::EventEmitter;
@@ -27,7 +11,15 @@ pub mod Automobile_calculator {
     use starknet::{
         get_block_timestamp, contract_address_const, get_caller_address, get_contract_address
     };
-    use super::Vehicle_Request;
+
+    use smart_contract::events::{
+        policy_initiated::Policy_initiated, burn_event::Burn,
+        transfer_event::{Transfer, TransferFrom}, approval_event::Approval, mint_event::Mint,
+        policy_renewal_event::Policy_renewed
+    };
+
+    use smart_contract::constants::{vehicle_request::Vehicle_Request, claim_status::ClaimStatus};
+    use smart_contract::constants::vehicle::Vehicle;
 
     #[storage]
     struct Storage {
@@ -51,37 +43,6 @@ pub mod Automobile_calculator {
     }
 
     #[derive(Drop, Serde, starknet::Store)]
-    pub enum ClaimStatus {
-        Claimed,
-        Processing,
-        Denied,
-    }
-
-    #[derive(Drop, Copy, Serde, Clone, starknet::Store)]
-    pub struct Vehicle {
-        id: u8,
-        driver_age: u8,
-        no_of_accidents: u8,
-        violations: u8,
-        vehicle_Category: i16,
-        vehicle_age: u8,
-        milage: u32,
-        safety_features: i16,
-        coverage_type: u16,
-        value: i32,
-        driver: ContractAddress,
-        insured: bool,
-        premium: u32,
-        policy_creation_date: u64,
-        policy_termination_date: u64,
-        policy_last_payment_date: u64,
-        policy_is_active: bool,
-        policy_holder: ContractAddress,
-        claim_status: bool,
-        img_url: felt252,
-        voting_power: bool
-    }
-    #[derive(Drop, Serde, starknet::Store)]
     pub struct Claim {
         id: u8,
         policy_holder: ContractAddress,
@@ -96,7 +57,6 @@ pub mod Automobile_calculator {
     pub trait Processing {
         fn process(self: ClaimStatus);
     }
-
     // Events
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -105,70 +65,10 @@ pub mod Automobile_calculator {
         Approval: Approval,
         Mint: Mint,
         Burn: Burn,
-        Policy_initiated: super::Policy_initiated,
+        Policy_initiated: Policy_initiated,
         Policy_renewed: Policy_renewed,
         TransferFrom: TransferFrom,
     }
-
-    #[derive(Drop, starknet::Event)]
-    struct Transfer {
-        #[key]
-        from: ContractAddress,
-        #[key]
-        to: ContractAddress,
-        value: u256,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    struct TransferFrom {
-        #[key]
-        from: ContractAddress,
-        #[key]
-        initiator: ContractAddress,
-        #[key]
-        to: ContractAddress,
-        value: u256,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    struct Approval {
-        #[key]
-        owner: ContractAddress,
-        #[key]
-        spender: ContractAddress,
-        value: u256,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    struct Mint {
-        #[key]
-        to: ContractAddress,
-        value: u256,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    struct Burn {
-        #[key]
-        from: ContractAddress,
-        value: u256,
-    }
-
-    // #[derive(Drop, starknet::Event)]
-    // struct Policy_initiated {
-    //     #[key]
-    //     policy_id: u8,
-    //     #[key]
-    //     policy_holder: ContractAddress,
-    // }
-
-    #[derive(Drop, starknet::Event)]
-    struct Policy_renewed {
-        #[key]
-        policy_id: u128,
-        #[key]
-        policy_holder: ContractAddress,
-    }
-
 
     #[constructor]
     fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
@@ -182,12 +82,8 @@ pub mod Automobile_calculator {
     #[abi(embed_v0)]
     impl Automobile_insuranceImpl of super::I_automobile_insurance<ContractState> {
         // register vehicle
-        fn register_vehicle(
-            ref self: ContractState, vehicle_request: Vehicle_Request
-        ) -> bool {
+        fn register_vehicle(ref self: ContractState, vehicle_request: Vehicle_Request) -> bool {
             let id = self.policy_id_counter.read() + 1;
-            //driver: ContractAddress, driver_age: u8, no_of_accidents:u8, violations: u8, vehicle_category: felt252, vehicle_age: u8, mileage: u32, safety_features: felt252, coverage_type: felt252, value: i32) 
-            
             let vc = self.vehicleCategories.read(vehicle_request.vehicle_category);
             let sf = self.safetyFeatureAdjustments.read(vehicle_request.safety_features);
             let cv = self.coverageTypeMultipliers.read(vehicle_request.coverage_type);
@@ -218,7 +114,7 @@ pub mod Automobile_calculator {
 
             self.policies.write(id, vehicle_data);
             self.policy_id_counter.write(id);
-            self.emit(super::Policy_initiated { policy_id: id, policy_holder: vehicle_request.driver });
+            self.emit(Policy_initiated { policy_id: id, policy_holder: vehicle_request.driver });
 
             true
         }
@@ -563,7 +459,6 @@ pub mod Automobile_calculator {
 
             self.balances.write(from, self.balances.read(from) - value);
             self.balances.write(to, self.balances.read(to) + value);
-            self.emit(Transfer { from, to, value });
             true
         }
     }
