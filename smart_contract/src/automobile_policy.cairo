@@ -341,6 +341,9 @@ pub mod Automobile_calculator {
             self.ownable.assert_only_owner();
             self.erc20._mint(recipient, amount);
         }
+        fn burn(ref self: ContractState,recipient: ContractAddress,amount: u256) {
+            self.erc20._burn(recipient, amount);
+        }
 
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {

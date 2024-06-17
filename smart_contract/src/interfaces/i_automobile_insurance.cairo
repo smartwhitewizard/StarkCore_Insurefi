@@ -26,4 +26,5 @@ pub trait I_automobile_insurance<T> {
         ref self: T, id: u8, claim_amount: u256, claim_details: ByteArray, image: ByteArray
     ) -> bool;
     fn mint(ref self: T, recipient: ContractAddress, amount: u256);
+    fn burn(ref self: T,recipient: ContractAddress, amount: u256);
 }
