@@ -71,10 +71,11 @@ let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
     assert(pre, 'wrong math');
 
     
-
+    cheat_caller_address(contract_address, _admin_address, CheatSpan::Indefinite);
     dispatcher.mint(driver, 70000000);
    
-
+    cheat_caller_address(contract_address, driver, CheatSpan::Indefinite);
+    
     dispatcher.initiate_policy(1);
 }
 

@@ -13,14 +13,36 @@ pub mod Automobile_calculator {
     };
 
     use smart_contract::events::{
-        policy_initiated::Policy_initiated, burn_event::Burn,
-        transfer_event::{Transfer, TransferFrom}, approval_event::Approval, mint_event::Mint,
+        policy_initiated::Policy_initiated,
         policy_renewal_event::Policy_renewed
     };
 
     use smart_contract::constants::{
         vehicle_request::Vehicle_Request, claim_status::ClaimStatus, vehicle::Vehicle, claim::Claim
     };
+
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::token::erc20::ERC20Component;
+    // use openzeppelin::token::erc20::ERC20HooksEmptyImpl;
+    use openzeppelin::upgrades::UpgradeableComponent;
+    use openzeppelin::upgrades::interface::IUpgradeable;
+    use starknet::ClassHash;
+
+    
+
+    component!(path: ERC20Component, storage: erc20, event: ERC20Event);
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+    component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
+
+    #[abi(embed_v0)]
+    impl ERC20MixinImpl = ERC20Component::ERC20MixinImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl OwnableMixinImpl = OwnableComponent::OwnableMixinImpl<ContractState>;
+
+    impl ERC20InternalImpl = ERC20Component::InternalImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+    impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
+
 
     #[storage]
     struct Storage {
@@ -35,12 +57,12 @@ pub mod Automobile_calculator {
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
         vehicleCategories: LegacyMap<felt252, i16>,
-        name: felt252,
-        symbol: felt252,
-        decimals: u8,
-        totalSupply: u256,
-        balances: LegacyMap::<ContractAddress, u256>,
-        allowances: LegacyMap::<(ContractAddress, ContractAddress), u256>,
+        #[substorage(v0)]
+        erc20: ERC20Component::Storage,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
+        #[substorage(v0)]
+        upgradeable: UpgradeableComponent::Storage,
     }
 
     #[derive(Drop, Serde, starknet::Store)]
@@ -51,22 +73,25 @@ pub mod Automobile_calculator {
     #[event]
     #[derive(Drop, starknet::Event)]
     enum Event {
-        Transfer: Transfer,
-        Approval: Approval,
-        Mint: Mint,
-        Burn: Burn,
+        
+        #[flat]
+        ERC20Event: ERC20Component::Event,
+        #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
+        UpgradeableEvent: UpgradeableComponent::Event,
+
         Policy_initiated: Policy_initiated,
         Policy_renewed: Policy_renewed,
-        TransferFrom: TransferFrom,
+        
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, initial_owner: ContractAddress) {
-        self.owner.write(initial_owner);
+    fn constructor(ref self: ContractState, owner: ContractAddress) {
+        self.owner.write(owner);
         self.set_categories();
-        self.name.write('INSUREFI');
-        self.symbol.write('IFI');
-        self.decimals.write(18);
+        self.erc20.initializer("InsureFiToken", "IFI");
+        self.ownable.initializer(owner);
     }
 
     #[abi(embed_v0)]
@@ -202,10 +227,14 @@ pub mod Automobile_calculator {
             let mut generated_vehicle_policy = self.policies.read(policy_id);
             let active = generated_vehicle_policy.policy_is_active;
             assert(!active, 'Policy is already active');
-            let bal = self.balanceOf(generated_vehicle_policy.driver);
+
+            
+            let balance = self.erc20.balanceOf(generated_vehicle_policy.driver);
+            
             let contract_Address = get_contract_address();
-            assert(bal >= generated_vehicle_policy.premium.into(), 'Insufficient balance');
-            self.transfer(contract_Address, generated_vehicle_policy.premium.into());
+            assert(balance >= generated_vehicle_policy.premium.into(), 'Insufficient balance');
+            self.erc20.transfer(contract_Address, generated_vehicle_policy.premium.into());
+
 
             generated_vehicle_policy.policy_is_active = true;
             generated_vehicle_policy.voting_power = true;
@@ -243,9 +272,9 @@ pub mod Automobile_calculator {
             assert(active, 'Policy is not active');
             let mut generated_vehicle_policy = self.policies.read(id);
             generated_vehicle_policy.policy_is_active = false;
-            let bal = self.balanceOf(generated_vehicle_policy.driver);
+            // let bal = self.balanceOf(generated_vehicle_policy.driver);
 
-            assert(bal >= claim_amount.into(), 'Insufficient balance');
+            // assert(bal >= claim_amount.into(), 'Insufficient balance');
 
             let claim_id = self.claimid.read();
 
@@ -271,11 +300,11 @@ pub mod Automobile_calculator {
             assert(is_expired, 'Policy is yet to expire');
 
             let mut generated_vehicle_policy = self.policies.read(policy_id);
-            let bal = self.balanceOf(generated_vehicle_policy.driver);
+            let bal = self.erc20.balanceOf(generated_vehicle_policy.driver);
             let contract_Address = get_contract_address();
 
             if bal >= generated_vehicle_policy.premium.into() {
-                let has_transferred: bool = self
+                let has_transferred: bool = self.erc20
                     .transfer(contract_Address, generated_vehicle_policy.premium.into());
 
                 assert(has_transferred, 'Failed to transfer premium');
@@ -306,86 +335,19 @@ pub mod Automobile_calculator {
                 return false;
             }
         }
+
+
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) {
+            self.ownable.assert_only_owner();
+            self.erc20._mint(recipient, amount);
+        }
+
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
 
 
-        ///////////////////////////////////
-        /// THE CONTRACT IS ALSO ERC20 ///
-        /// /////////////////////////////
-
-        fn name(self: @ContractState) -> felt252 {
-            self.name.read()
-        }
-
-        fn symbol(self: @ContractState) -> felt252 {
-            self.symbol.read()
-        }
-
-        fn decimals(self: @ContractState) -> u8 {
-            self.decimals.read()
-        }
-
-        fn totalSupply(self: @ContractState) -> u256 {
-            self.totalSupply.read()
-        }
-
-        fn balanceOf(self: @ContractState, owner: ContractAddress) -> u256 {
-            self.balances.read(owner)
-        }
-
-        fn allowance(
-            self: @ContractState, owner: ContractAddress, spender: ContractAddress
-        ) -> u256 {
-            self.allowances.read((owner, spender))
-        }
-
-        fn transfer(ref self: ContractState, to: ContractAddress, value: u256) -> bool {
-            let msg_sender = get_caller_address();
-            self._transfer(msg_sender, to, value);
-            self.emit(Transfer { from: msg_sender, to: to, value: value });
-            true
-        }
-
-        fn transferFrom(
-            ref self: ContractState, from: ContractAddress, to: ContractAddress, value: u256
-        ) -> bool {
-            let msg_sender = get_caller_address();
-            let allowance = self.allowance(from, msg_sender);
-            assert(allowance >= value, 'Insufficient allowance');
-            self._transfer(from, to, value);
-            self.allowances.write((from, msg_sender), allowance - value);
-            self.emit(TransferFrom { from: from, initiator: msg_sender, to: to, value: value });
-            true
-        }
-
-        fn approve(ref self: ContractState, spender: ContractAddress, value: u256) -> bool {
-            let msg_sender = get_caller_address();
-            self.allowances.write((msg_sender, spender), value);
-            self.emit(Approval { owner: msg_sender, spender: spender, value: value, });
-            true
-        }
-
-        // mint
-        fn mint(ref self: ContractState, to: ContractAddress, value: u256) {
-            let total_supply = self.totalSupply.read();
-            self.totalSupply.write(total_supply + value);
-            let balance = self.balances.read(to);
-            self.balances.write(to, balance + value);
-            self.emit(Mint { to: to, value: value, });
-        }
-
-        // burn
-        fn burn(ref self: ContractState, from: ContractAddress, value: u256) {
-            let balance = self.balances.read(from);
-            assert(balance >= value, 'Insufficient balance');
-            self.balances.write(from, balance - value);
-            let total_supply = self.totalSupply.read();
-            self.totalSupply.write(total_supply - value);
-            self.emit(Burn { from: from, value: value, });
-        }
     }
 
 
@@ -438,18 +400,14 @@ pub mod Automobile_calculator {
             now > expirydate
         }
 
-        fn _transfer(
-            ref self: ContractState, from: ContractAddress, to: ContractAddress, value: u256
-        ) -> bool {
-            let address_zero: ContractAddress = contract_address_const::<0>();
-            assert(from != address_zero, 'From address is zero');
-            assert(to != address_zero, 'To address is zero');
-            assert(value > 0, 'Value must be greater than zero');
-            assert(self.balances.read(from) >= value, 'Insufficient balance');
+       
+    }
 
-            self.balances.write(from, self.balances.read(from) - value);
-            self.balances.write(to, self.balances.read(to) + value);
-            true
+    #[abi(embed_v0)]
+    impl UpgradeableImpl of IUpgradeable<ContractState> {
+        fn upgrade(ref self: ContractState, new_class_hash: ClassHash) {
+            self.ownable.assert_only_owner();
+            self.upgradeable._upgrade(new_class_hash);
         }
     }
 }
