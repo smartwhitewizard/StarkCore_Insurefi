@@ -27,4 +27,5 @@ pub trait I_automobile_insurance<T> {
     ) -> bool;
     fn mint(ref self: T, recipient: ContractAddress, amount: u256);
     fn burn(ref self: T,recipient: ContractAddress, amount: u256);
+    fn vote_on_claim(ref self: T, id:u8, ClaimStatus: ClaimStatus) -> bool;
 }
