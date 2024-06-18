@@ -368,6 +368,9 @@ pub mod Automobile_calculator {
 
         }
 
+        fn view_claim(self: @ContractState, id: u8) -> Claim {
+            self.claims.read(id)
+        }
 
     }
 
