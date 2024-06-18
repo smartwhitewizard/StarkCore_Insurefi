@@ -372,15 +372,45 @@ pub mod Automobile_calculator {
             self.claims.read(id)
         }
 
+        fn claim_status(ref self: ContractState, id: u8) -> felt252 {
+            let mut claim = self.claims.read(id);
+            let claim_count = claim.claim_vote;
+            let total_voters = self.voters_count.read();
+            let mut m: felt252 = 'Processing';
+            let claim_status = claim.claim_status;
+
+            let msg: ClaimStatus = ClaimStatus::Denied;
+            let message =  claim_status.process() == msg.process();
+
+            assert(!message, 'Claim have already been Denied');
+            
+
+            let average = (claim_count/total_voters.into()) * 100;
+
+
+            if(average >= 70){
+                claim.claim_status = ClaimStatus::Approved;
+                m = 'Approved';
+                
+            }
+            else {
+                claim.claim_status = ClaimStatus::Processing;
+            }         
+           
+           m
+
+        }
+
     }
 
 
     impl ProcessingImpl of Processing {
         fn process(self: ClaimStatus) {
             match self {
-                ClaimStatus::Claimed => { println!("quitting") },
                 ClaimStatus::Processing => { println!("Processing") },
+                ClaimStatus::Approved => { println!("quitting") },
                 ClaimStatus::Denied => { println!("Denied") },
+                ClaimStatus::Claimed => { println!("Claimed") },
             }
         }
     }

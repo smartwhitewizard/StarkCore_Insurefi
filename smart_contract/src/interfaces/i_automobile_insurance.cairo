@@ -30,4 +30,5 @@ pub trait I_automobile_insurance<T> {
     fn burn(ref self: T,recipient: ContractAddress, amount: u256);
     fn vote_on_claim(ref self: T, id:u8, ClaimStatus: ClaimStatus) -> bool;
     fn view_claim(self : @T, id:u8) -> Claim;
+    fn claim_status(ref self: T, id: u8) -> felt252 ;
 }
