@@ -49,8 +49,8 @@ pub mod Automobile_calculator {
         policies: LegacyMap<u8, Vehicle>,
         claims: LegacyMap<u8, Claim>,
         voters_count: u16,
-        policiy_holder: LegacyMap<ContractAddress, Vehicle>,
-        // policiy_holder: LegacyMap<u8, ContractAddress>,
+        // policiy_holder: LegacyMap<ContractAddress, Vehicle>,
+        policiy_holder: LegacyMap<u8, ContractAddress>,
         policy_id_counter: u8,
         claimid: u8,
         owner: ContractAddress,
@@ -247,7 +247,7 @@ pub mod Automobile_calculator {
             generated_vehicle_policy.policy_last_payment_date = get_block_timestamp();
 
             self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
-            self.policiy_holder.write(generated_vehicle_policy.driver, generated_vehicle_policy);
+            self.policiy_holder.write(generated_vehicle_policy.id, generated_vehicle_policy.driver);
             self
                 .emit(
                     Policy_renewed {
@@ -351,9 +351,9 @@ pub mod Automobile_calculator {
         }
 
         fn vote_on_claim(ref self: ContractState, id:u8, ClaimStatus: ClaimStatus) -> bool {
-            let vot = get_caller_address();
             
-            let mut voter = self.policiy_holder.read(vot);
+            
+            let mut voter = self.policies.read(id);
             assert(voter.voting_power, 'Not Eligible to Vote');
             let mut claim = self.claims.read(id);
             claim.claim_vote + 1;
@@ -361,7 +361,7 @@ pub mod Automobile_calculator {
 
             voter.voting_power = false ;
 
-            self.policiy_holder.write(vot, voter);
+            
             self.policies.write(voter.id, voter);
 
             true
