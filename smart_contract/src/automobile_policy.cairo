@@ -3,6 +3,7 @@ use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
 
 #[starknet::contract]
 pub mod Automobile_calculator {
+    use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
     use core::clone::Clone;
     use core::option::OptionTrait;
     use core::traits::Into;
@@ -13,12 +14,12 @@ pub mod Automobile_calculator {
     };
 
     use smart_contract::events::{
-        policy_initiated::Policy_initiated,
-        policy_renewal_event::Policy_renewed
+        policy_initiated::Policy_initiated, policy_renewal_event::Policy_renewed
     };
 
     use smart_contract::constants::{
-        vehicle_request::Vehicle_Request, claim_status::ClaimStatus, vehicle::Vehicle, claim::Claim
+        vehicle_request::Vehicle_Request, claim_status::ClaimStatus, vehicle::{Vehicle, Vehicle_Policy},
+        claim::Claim
     };
 
     use openzeppelin::access::ownable::OwnableComponent;
@@ -28,7 +29,6 @@ pub mod Automobile_calculator {
     use openzeppelin::upgrades::interface::IUpgradeable;
     use starknet::ClassHash;
 
-    
 
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -73,17 +73,14 @@ pub mod Automobile_calculator {
     #[event]
     #[derive(Drop, starknet::Event)]
     enum Event {
-        
         #[flat]
         ERC20Event: ERC20Component::Event,
         #[flat]
         OwnableEvent: OwnableComponent::Event,
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
-
         Policy_initiated: Policy_initiated,
         Policy_renewed: Policy_renewed,
-        
     }
 
     #[constructor]
@@ -117,11 +114,13 @@ pub mod Automobile_calculator {
                 value: vehicle_request.value,
                 insured: false,
                 premium: 0,
-                policy_creation_date: 0,
-                policy_termination_date: 0,
-                policy_last_payment_date: 0,
-                policy_is_active: false,
-                policy_holder: vehicle_request.driver,
+                vehicle_policy: Vehicle_Policy {
+                    policy_creation_date: 0,
+                    policy_termination_date: 0,
+                    policy_last_payment_date: 0,
+                    policy_is_active: false,
+                    policy_holder: vehicle_request.driver,
+                },
                 claim_status: false,
                 img_url: 'Blank',
                 voting_power: false
@@ -135,18 +134,15 @@ pub mod Automobile_calculator {
         }
 
         fn get_specific_vehicle(self: @ContractState, id: u8) -> Vehicle {
-            let vehicle = self.policies.read(id);
-            vehicle
+            self.policies.read(id)
         }
 
         fn get_specific_vehiclea(self: @ContractState, id: u8) -> u8 {
-            let vehicle = self.policies.read(id);
-            vehicle.id
+            self.get_specific_vehicle(id).id
         }
 
         fn get_specific_driver(self: @ContractState, id: u8) -> ContractAddress {
-            let vehicle = self.policies.read(id);
-            vehicle.driver
+            self.get_specific_vehicle(id).driver
         }
 
         fn generate_premium(ref self: ContractState, policy_id: u8) -> u32 {
@@ -208,11 +204,15 @@ pub mod Automobile_calculator {
             //                      CALCULATING PREMIUM
             /// //////////////////////////////////////////////////////////////////
 
-            let premium3 = (100 + driver_final + final_vehicle_risk.into());
+            // let premium3 = (100 + driver_final + final_vehicle_risk.into());
 
-            let premium2 = (premium3 * newPolicy.value).try_into().unwrap() / 1000;
+            // let premium2 = (premium3 * newPolicy.value).try_into().unwrap() / 1000;
 
-            let premium = (premium2 * newPolicy.coverage_type.into()) / 1000;
+            // let premium = (premium2 * newPolicy.coverage_type.into()) / 1000;
+
+            let premium = PrivateTrait::calculate_premium(
+                driver_final, final_vehicle_risk, newPolicy.value, newPolicy.coverage_type
+            );
 
             newPolicy.premium = premium;
 
@@ -225,26 +225,27 @@ pub mod Automobile_calculator {
 
         fn initiate_policy(ref self: ContractState, policy_id: u8) -> bool {
             let mut generated_vehicle_policy = self.policies.read(policy_id);
-            let active = generated_vehicle_policy.policy_is_active;
+            let active = generated_vehicle_policy.vehicle_policy.policy_is_active;
             assert(!active, 'Policy is already active');
 
-            
             let balance = self.erc20.balanceOf(generated_vehicle_policy.driver);
-            
+
             let contract_Address = get_contract_address();
             assert(balance >= generated_vehicle_policy.premium.into(), 'Insufficient balance');
             self.erc20.transfer(contract_Address, generated_vehicle_policy.premium.into());
 
-
-            generated_vehicle_policy.policy_is_active = true;
+            generated_vehicle_policy.vehicle_policy.policy_is_active = true;
             generated_vehicle_policy.voting_power = true;
 
             let voting = self.voters_count.read() + 1;
             self.voters_count.write(voting);
 
-            generated_vehicle_policy.policy_creation_date = get_block_timestamp();
-            generated_vehicle_policy.policy_termination_date = get_block_timestamp() + 60;
-            generated_vehicle_policy.policy_last_payment_date = get_block_timestamp();
+            generated_vehicle_policy.vehicle_policy.policy_creation_date = get_block_timestamp();
+            generated_vehicle_policy.vehicle_policy.policy_termination_date = get_block_timestamp()
+                + 60;
+            generated_vehicle_policy
+                .vehicle_policy
+                .policy_last_payment_date = get_block_timestamp();
 
             self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
             self.policiy_holder.write(generated_vehicle_policy.driver, generated_vehicle_policy);
@@ -271,7 +272,7 @@ pub mod Automobile_calculator {
             let active = self.is_expired(id);
             assert(active, 'Policy is not active');
             let mut generated_vehicle_policy = self.policies.read(id);
-            generated_vehicle_policy.policy_is_active = false;
+            generated_vehicle_policy.vehicle_policy.policy_is_active = false;
             // let bal = self.balanceOf(generated_vehicle_policy.driver);
 
             // assert(bal >= claim_amount.into(), 'Insufficient balance');
@@ -304,20 +305,28 @@ pub mod Automobile_calculator {
             let contract_Address = get_contract_address();
 
             if bal >= generated_vehicle_policy.premium.into() {
-                let has_transferred: bool = self.erc20
+                let has_transferred: bool = self
+                    .erc20
                     .transfer(contract_Address, generated_vehicle_policy.premium.into());
 
                 assert(has_transferred, 'Failed to transfer premium');
 
-                generated_vehicle_policy.policy_is_active = true;
+                generated_vehicle_policy.vehicle_policy.policy_is_active = true;
                 generated_vehicle_policy.voting_power = true;
 
                 let voting = self.voters_count.read() + 1;
                 self.voters_count.write(voting);
 
-                generated_vehicle_policy.policy_creation_date = get_block_timestamp();
-                generated_vehicle_policy.policy_termination_date = get_block_timestamp() + 60;
-                generated_vehicle_policy.policy_last_payment_date = get_block_timestamp();
+                generated_vehicle_policy
+                    .vehicle_policy
+                    .policy_creation_date = get_block_timestamp();
+                generated_vehicle_policy
+                    .vehicle_policy
+                    .policy_termination_date = get_block_timestamp()
+                    + 60;
+                generated_vehicle_policy
+                    .vehicle_policy
+                    .policy_last_payment_date = get_block_timestamp();
 
                 self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
 
@@ -331,7 +340,7 @@ pub mod Automobile_calculator {
                 return true;
             } else {
                 println!("Insufficient balance");
-                generated_vehicle_policy.policy_is_active = false;
+                generated_vehicle_policy.vehicle_policy.policy_is_active = false;
                 return false;
             }
         }
@@ -341,7 +350,7 @@ pub mod Automobile_calculator {
             self.ownable.assert_only_owner();
             self.erc20._mint(recipient, amount);
         }
-        fn burn(ref self: ContractState,recipient: ContractAddress,amount: u256) {
+        fn burn(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             self.erc20._burn(recipient, amount);
         }
 
@@ -350,22 +359,20 @@ pub mod Automobile_calculator {
             self.owner.read()
         }
 
-        fn vote_on_claim(ref self: ContractState, id:u8, ClaimStatus: ClaimStatus) -> bool {
+        fn vote_on_claim(ref self: ContractState, id: u8, ClaimStatus: ClaimStatus) -> bool {
             let vot = get_caller_address();
-            
+
             let mut voter = self.policiy_holder.read(vot);
             assert(voter.voting_power, 'Not Eligible to Vote');
             let mut claim = self.claims.read(id);
             claim.claim_vote + 1;
 
-
-            voter.voting_power = false ;
+            voter.voting_power = false;
 
             self.policiy_holder.write(vot, voter);
             self.policies.write(voter.id, voter);
 
             true
-
         }
 
         fn view_claim(self: @ContractState, id: u8) -> Claim {
@@ -380,27 +387,21 @@ pub mod Automobile_calculator {
             let claim_status = claim.claim_status;
 
             let msg: ClaimStatus = ClaimStatus::Denied;
-            let message =  claim_status.process() == msg.process();
+            let message = claim_status.process() == msg.process();
 
             assert(!message, 'Claim have already been Denied');
-            
 
-            let average = (claim_count/total_voters.into()) * 100;
+            let average = (claim_count / total_voters.into()) * 100;
 
-
-            if(average >= 70){
+            if (average >= 70) {
                 claim.claim_status = ClaimStatus::Approved;
                 m = 'Approved';
-                
-            }
-            else {
+            } else {
                 claim.claim_status = ClaimStatus::Processing;
-            }         
-           
-           m
+            }
 
+            m
         }
-
     }
 
 
@@ -449,12 +450,20 @@ pub mod Automobile_calculator {
 
         fn is_expired(ref self: ContractState, id: u8) -> bool {
             let mut generated_vehicle_policy = self.policies.read(id);
-            let expirydate = generated_vehicle_policy.policy_termination_date;
+            let expirydate = generated_vehicle_policy.vehicle_policy.policy_termination_date;
             let now = get_block_timestamp();
             now > expirydate
         }
 
-       
+        fn calculate_premium(
+            driver_final: i32, final_vehicle_risk: i16, policy_value: i32, policy_coverage_type: u16
+        ) -> u32 {
+            let premium3 = (100 + driver_final + final_vehicle_risk.into());
+
+            let premium2 = (premium3 * policy_value).try_into().unwrap() / 1000;
+
+            (premium2 * policy_coverage_type.into()) / 1000
+        }
     }
 
     #[abi(embed_v0)]
