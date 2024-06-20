@@ -28,4 +28,5 @@ pub trait I_automobile_insurance<T> {
     fn set_dao_address(ref self: T, dao_address: ContractAddress) -> bool;
     fn get_number_of_user_vehicle_insured(self: @T, user_address: ContractAddress) -> u128;
     fn get_policies_count(self: @T) -> u128;
+    fn finalize_and_execute_claim(ref self: T, claim_id: u128) -> bool;
 }

@@ -1,17 +1,19 @@
-use starknet::ContractAddress;
+use starknet::{ContractAddress,};
 use smart_contract::interfaces::{i_automobile_insurance::I_automobile_insurance,};
 
 use super::dao::{Dao::DaoImpl, Claim_Proposal,};
 
 #[starknet::contract]
 pub mod Automobile_calculator {
+    use core::traits::Destruct;
+    use core::serde::Serde;
     use smart_contract::interfaces::i_dao::I_DaoDispatcherTrait;
     use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
     use core::clone::Clone;
     use core::option::OptionTrait;
     use core::traits::Into;
     use core::starknet::event::EventEmitter;
-    use super::ContractAddress;
+    use super::{ContractAddress,};
     use smart_contract::interfaces::i_dao::I_DaoDispatcher;
     use starknet::{
         get_block_timestamp, contract_address_const, get_caller_address, get_contract_address
@@ -280,7 +282,9 @@ pub mod Automobile_calculator {
             self.claimid.write(claim_id + 1);
 
             let proposal_created: bool = I_DaoDispatcher { contract_address: self.dao_here.read() }
-                .create_proposal(claim_amount, generated_vehicle_policy.driver, image_uploaded);
+                .create_proposal(
+                    claim_amount, generated_vehicle_policy.driver, image_uploaded, claim_id
+                );
 
             proposal_created
         }
@@ -298,7 +302,11 @@ pub mod Automobile_calculator {
             if bal >= generated_vehicle_policy.premium.into() {
                 let has_transferred: bool = self
                     .erc20
-                    .transfer(contract_Address, generated_vehicle_policy.premium.into());
+                    .transferFrom(
+                        contract_Address,
+                        get_contract_address(),
+                        generated_vehicle_policy.premium.into()
+                    );
 
                 assert(has_transferred, 'Failed to transfer premium');
 
@@ -343,7 +351,6 @@ pub mod Automobile_calculator {
         fn burn(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             self.erc20._burn(recipient, amount);
         }
-
         //get owner
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
@@ -372,12 +379,26 @@ pub mod Automobile_calculator {
             get_user_vehicle_insurance
         }
 
-        fn get_number_of_user_vehicle_insured(self: @ContractState, user_address: ContractAddress) -> u128 {
+        fn get_number_of_user_vehicle_insured(
+            self: @ContractState, user_address: ContractAddress
+        ) -> u128 {
             self.get_user_insurance(user_address).len().into()
         }
 
         fn get_policies_count(self: @ContractState) -> u128 {
             self.policy_id_counter.read()
+        }
+
+        fn finalize_and_execute_claim(ref self: ContractState, claim_id: u128) -> bool {
+            assert!(
+                get_caller_address() == self.dao_here.read(),
+                "Only Dao can finalize and execute claim"
+            );
+            let mut claim: Claim = self.claims.read(claim_id);
+            claim.claim_status = ClaimStatus::Approved;
+            self.claims.write(claim_id, claim.clone());
+            self.erc20.transfer(claim.policy_holder, claim.claim_amount.into());
+            true
         }
     }
 
