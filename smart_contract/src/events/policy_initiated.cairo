@@ -5,7 +5,7 @@ use starknet::ContractAddress;
 #[derive(Drop, starknet::Event)]
 pub struct Policy_initiated {
     #[key]
-    pub policy_id: u8,
+    pub policy_id: u128,
     #[key]
     pub policy_holder: ContractAddress,
 }

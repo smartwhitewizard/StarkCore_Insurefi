@@ -1,4 +1,4 @@
-#[derive(Drop, Serde, starknet::Store)]
+#[derive(Drop, Serde, Clone, starknet::Store)]
 pub enum ClaimStatus {
     Processing,
     Approved,

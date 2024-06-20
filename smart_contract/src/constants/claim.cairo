@@ -1,9 +1,9 @@
 use starknet::{ContractAddress};
 use smart_contract::constants::claim_status::ClaimStatus;
 
-#[derive(Drop, Serde, starknet::Store)]
+#[derive(Drop, Serde, Clone, starknet::Store)]
 pub struct Claim {
-    pub id: u8,
+    pub id: u128,
     pub policy_holder: ContractAddress,
     pub claim_amount: u256,
     pub claim_details: ByteArray,
