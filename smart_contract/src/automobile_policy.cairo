@@ -1,14 +1,18 @@
 use starknet::ContractAddress;
-use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
+use smart_contract::interfaces::{i_automobile_insurance::I_automobile_insurance,};
+
+use super::dao::{Dao::DaoImpl, Claim_Proposal,};
 
 #[starknet::contract]
 pub mod Automobile_calculator {
+    use smart_contract::interfaces::i_dao::I_DaoDispatcherTrait;
     use smart_contract::interfaces::i_automobile_insurance::I_automobile_insurance;
     use core::clone::Clone;
     use core::option::OptionTrait;
     use core::traits::Into;
     use core::starknet::event::EventEmitter;
     use super::ContractAddress;
+    use smart_contract::interfaces::i_dao::I_DaoDispatcher;
     use starknet::{
         get_block_timestamp, contract_address_const, get_caller_address, get_contract_address
     };
@@ -18,13 +22,12 @@ pub mod Automobile_calculator {
     };
 
     use smart_contract::constants::{
-        vehicle_request::Vehicle_Request, claim_status::ClaimStatus, vehicle::{Vehicle, Vehicle_Policy},
-        claim::Claim
+        vehicle_request::Vehicle_Request, claim_status::ClaimStatus,
+        vehicle::{Vehicle, Vehicle_Policy}, claim::Claim
     };
 
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::ERC20Component;
-    // use openzeppelin::token::erc20::ERC20HooksEmptyImpl;
     use openzeppelin::upgrades::UpgradeableComponent;
     use openzeppelin::upgrades::interface::IUpgradeable;
     use starknet::ClassHash;
@@ -46,13 +49,11 @@ pub mod Automobile_calculator {
 
     #[storage]
     struct Storage {
-        policies: LegacyMap<u8, Vehicle>,
-        claims: LegacyMap<u8, Claim>,
+        policies: LegacyMap<u128, Vehicle>,
+        claims: LegacyMap<u128, Claim>,
         voters_count: u16,
-        // policiy_holder: LegacyMap<ContractAddress, Vehicle>,
-        policiy_holder: LegacyMap<u8, ContractAddress>,
-        policy_id_counter: u8,
-        claimid: u8,
+        policy_id_counter: u128,
+        claimid: u128,
         owner: ContractAddress,
         safetyFeatureAdjustments: LegacyMap<felt252, i16>,
         coverageTypeMultipliers: LegacyMap<felt252, u16>,
@@ -63,6 +64,7 @@ pub mod Automobile_calculator {
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
         upgradeable: UpgradeableComponent::Storage,
+        dao_here: ContractAddress,
     }
 
     #[derive(Drop, Serde, starknet::Store)]
@@ -92,7 +94,7 @@ pub mod Automobile_calculator {
     }
 
     #[abi(embed_v0)]
-    impl Automobile_insuranceImpl of super::I_automobile_insurance<ContractState> {
+    pub impl Automobile_insuranceImpl of super::I_automobile_insurance<ContractState> {
         // register vehicle
         fn register_vehicle(ref self: ContractState, vehicle_request: Vehicle_Request) -> bool {
             let id = self.policy_id_counter.read() + 1;
@@ -133,19 +135,19 @@ pub mod Automobile_calculator {
             true
         }
 
-        fn get_specific_vehicle(self: @ContractState, id: u8) -> Vehicle {
+        fn get_specific_vehicle(self: @ContractState, id: u128) -> Vehicle {
             self.policies.read(id)
         }
 
-        fn get_specific_vehiclea(self: @ContractState, id: u8) -> u8 {
+        fn get_specific_vehiclea(self: @ContractState, id: u128) -> u128 {
             self.get_specific_vehicle(id).id
         }
 
-        fn get_specific_driver(self: @ContractState, id: u8) -> ContractAddress {
+        fn get_specific_driver(self: @ContractState, id: u128) -> ContractAddress {
             self.get_specific_vehicle(id).driver
         }
 
-        fn generate_premium(ref self: ContractState, policy_id: u8) -> u32 {
+        fn generate_premium(ref self: ContractState, policy_id: u128) -> u32 {
             let mut newPolicy = self.policies.read(policy_id);
 
             let category = newPolicy.vehicle_Category;
@@ -200,16 +202,6 @@ pub mod Automobile_calculator {
             // Using violations
             driver_final = driver_ris + (newPolicy.violations.into() * 10);
 
-            ////////////////////////////////////////////////////////////////////////
-            //                      CALCULATING PREMIUM
-            /// //////////////////////////////////////////////////////////////////
-
-            // let premium3 = (100 + driver_final + final_vehicle_risk.into());
-
-            // let premium2 = (premium3 * newPolicy.value).try_into().unwrap() / 1000;
-
-            // let premium = (premium2 * newPolicy.coverage_type.into()) / 1000;
-
             let premium = PrivateTrait::calculate_premium(
                 driver_final, final_vehicle_risk, newPolicy.value, newPolicy.coverage_type
             );
@@ -223,7 +215,7 @@ pub mod Automobile_calculator {
 
         // INITIATE POLICY
 
-        fn initiate_policy(ref self: ContractState, policy_id: u8) -> bool {
+        fn initiate_policy(ref self: ContractState, policy_id: u128) -> bool {
             let mut generated_vehicle_policy = self.policies.read(policy_id);
             let active = generated_vehicle_policy.vehicle_policy.policy_is_active;
             assert(!active, 'Policy is already active');
@@ -248,7 +240,6 @@ pub mod Automobile_calculator {
                 .policy_last_payment_date = get_block_timestamp();
 
             self.policies.write(generated_vehicle_policy.id, generated_vehicle_policy);
-            self.policiy_holder.write(generated_vehicle_policy.id, generated_vehicle_policy.driver);
             self
                 .emit(
                     Policy_renewed {
@@ -259,25 +250,21 @@ pub mod Automobile_calculator {
             true
         }
 
-
         fn file_claim(
             ref self: ContractState,
-            id: u8,
+            id: u128,
             claim_amount: u256,
             claim_details: ByteArray,
             image: ByteArray
         ) -> bool {
-            // self.is_expired(id);
-
             let active = self.is_expired(id);
             assert(active, 'Policy is not active');
             let mut generated_vehicle_policy = self.policies.read(id);
             generated_vehicle_policy.vehicle_policy.policy_is_active = false;
-            // let bal = self.balanceOf(generated_vehicle_policy.driver);
-
-            // assert(bal >= claim_amount.into(), 'Insufficient balance');
 
             let claim_id = self.claimid.read();
+
+            let image_uploaded: ByteArray = image;
 
             let claim: Claim = Claim {
                 id: claim_id,
@@ -285,17 +272,21 @@ pub mod Automobile_calculator {
                 claim_amount: claim_amount,
                 claim_details: claim_details,
                 claim_status: ClaimStatus::Processing,
-                accident_image: image,
+                accident_image: image_uploaded.clone(),
                 claim_vote: 1
             };
+
             self.claims.write(claim_id, claim);
             self.claimid.write(claim_id + 1);
 
-            true
+            let proposal_created: bool = I_DaoDispatcher { contract_address: self.dao_here.read() }
+                .create_proposal(claim_amount, generated_vehicle_policy.driver, image_uploaded);
+
+            proposal_created
         }
 
         // RENEW POLICY
-        fn renew_policy(ref self: ContractState, policy_id: u8) -> bool {
+        fn renew_policy(ref self: ContractState, policy_id: u128) -> bool {
             let is_expired: bool = self.is_expired(policy_id);
 
             assert(is_expired, 'Policy is yet to expire');
@@ -345,7 +336,6 @@ pub mod Automobile_calculator {
             }
         }
 
-
         fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             self.ownable.assert_only_owner();
             self.erc20._mint(recipient, amount);
@@ -359,49 +349,35 @@ pub mod Automobile_calculator {
             self.owner.read()
         }
 
-        fn vote_on_claim(ref self: ContractState, id:u8, ClaimStatus: ClaimStatus) -> bool {
-            
-            
-            let mut voter = self.policies.read(id);
-            assert(voter.voting_power, 'Not Eligible to Vote');
-            let mut claim = self.claims.read(id);
-            claim.claim_vote + 1;
-
-
-            voter.voting_power = false ;
-
-            
-            self.policies.write(voter.id, voter);
-
+        fn set_dao_address(ref self: ContractState, dao_address: ContractAddress) -> bool {
+            self.only_owner();
+            self.dao_here.write(dao_address);
             true
         }
 
-        fn view_claim(self: @ContractState, id: u8) -> Claim {
-            self.claims.read(id)
+        fn get_user_insurance(
+            self: @ContractState, user_address: ContractAddress
+        ) -> Array::<Vehicle> {
+            let mut get_user_vehicle_insurance: Array<Vehicle> = ArrayTrait::<Vehicle>::new();
+            let mut vehicle_counter: u128 = 1;
+            while vehicle_counter <= self
+                .policy_id_counter
+                .read() {
+                    let vehicle_insured = self.policies.read(vehicle_counter);
+                    if vehicle_insured.driver == user_address {
+                        get_user_vehicle_insurance.append(vehicle_insured);
+                    }
+                    vehicle_counter = vehicle_counter + 1;
+                };
+            get_user_vehicle_insurance
         }
 
-        fn claim_status(ref self: ContractState, id: u8) -> felt252 {
-            let mut claim = self.claims.read(id);
-            let claim_count = claim.claim_vote;
-            let total_voters = self.voters_count.read();
-            let mut m: felt252 = 'Processing';
-            let claim_status = claim.claim_status;
+        fn get_number_of_user_vehicle_insured(self: @ContractState, user_address: ContractAddress) -> u128 {
+            self.get_user_insurance(user_address).len().into()
+        }
 
-            let msg: ClaimStatus = ClaimStatus::Denied;
-            let message = claim_status.process() == msg.process();
-
-            assert(!message, 'Claim have already been Denied');
-
-            let average = (claim_count / total_voters.into()) * 100;
-
-            if (average >= 70) {
-                claim.claim_status = ClaimStatus::Approved;
-                m = 'Approved';
-            } else {
-                claim.claim_status = ClaimStatus::Processing;
-            }
-
-            m
+        fn get_policies_count(self: @ContractState) -> u128 {
+            self.policy_id_counter.read()
         }
     }
 
@@ -449,7 +425,7 @@ pub mod Automobile_calculator {
             self.vehicleCategories.write('sports', 200);
         }
 
-        fn is_expired(ref self: ContractState, id: u8) -> bool {
+        fn is_expired(ref self: ContractState, id: u128) -> bool {
             let mut generated_vehicle_policy = self.policies.read(id);
             let expirydate = generated_vehicle_policy.vehicle_policy.policy_termination_date;
             let now = get_block_timestamp();

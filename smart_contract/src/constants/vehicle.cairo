@@ -2,7 +2,7 @@ use starknet::ContractAddress;
 
 #[derive(Drop, Copy, Serde, Clone, starknet::Store)]
 pub struct Vehicle {
-    pub id: u8,
+    pub id: u128,
     pub driver_age: u8,
     pub no_of_accidents: u8,
     pub violations: u8,
