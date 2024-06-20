@@ -1,13 +1,12 @@
-
-
-
 #[starknet::contract]
 pub mod Dao {
     use core::option::OptionTrait;
     use smart_contract::interfaces::i_dao::I_Dao;
     use smart_contract::constants::claim::Claim;
     use starknet::{ContractAddress, get_caller_address};
-    use smart_contract::interfaces::i_automobile_insurance::{I_automobile_insuranceDispatcherTrait, I_automobile_insuranceDispatcher};
+    use smart_contract::interfaces::i_automobile_insurance::{
+        I_automobile_insuranceDispatcherTrait, I_automobile_insuranceDispatcher
+    };
 
     #[storage]
     pub struct Storage {
@@ -58,9 +57,12 @@ pub mod Dao {
 
             self.has_voted_proposal.write((proposal_claim_id, user_address), true);
 
-            let automobile_dispatcher = I_automobile_insuranceDispatcher { contract_address: self.automobile_insurance_address.read() };
+            let automobile_dispatcher = I_automobile_insuranceDispatcher {
+                contract_address: self.automobile_insurance_address.read()
+            };
 
-            let number_of_user_insured_vehicle = automobile_dispatcher.get_number_of_user_vehicle_insured(user_address);
+            let number_of_user_insured_vehicle = automobile_dispatcher
+                .get_number_of_user_vehicle_insured(user_address);
 
             assert!(number_of_user_insured_vehicle > 0, "user has no vehicle insured");
             proposal.vote_count += number_of_user_insured_vehicle;
@@ -83,7 +85,7 @@ pub mod Dao {
             ref self: ContractState,
             claim_amount: u256,
             user_address: ContractAddress,
-            image: ByteArray, 
+            image: ByteArray,
             claim_id: u128
         ) -> bool {
             let proposal: super::Claim_Proposal = super::Claim_Proposal {
@@ -107,14 +109,23 @@ pub mod Dao {
         fn finalize_proposal(ref self: ContractState, proposal_claim_id: u128) -> bool {
             let mut proposal = self.proposal_claims.read(proposal_claim_id);
             assert!(!proposal.is_done, "proposal already finalized");
-            assert!(proposal.proposal_creator == get_caller_address(), "only proposal creator can finalize proposal");
+            assert!(
+                proposal.proposal_creator == get_caller_address(),
+                "only proposal creator can finalize proposal"
+            );
 
-            let number_of_policies = I_automobile_insuranceDispatcher { contract_address: self.automobile_insurance_address.read()}.get_policies_count();
-            
-            let average = (number_of_policies/ proposal.vote_count) * 100;
+            let number_of_policies = I_automobile_insuranceDispatcher {
+                contract_address: self.automobile_insurance_address.read()
+            }
+                .get_policies_count();
+
+            let average = (number_of_policies / proposal.vote_count) * 100;
 
             if average >= 70 {
-                I_automobile_insuranceDispatcher { contract_address: self.automobile_insurance_address.read() }.finalize_and_execute_claim(proposal.claim_id);
+                I_automobile_insuranceDispatcher {
+                    contract_address: self.automobile_insurance_address.read()
+                }
+                    .finalize_and_execute_claim(proposal.claim_id);
                 proposal.is_done = true;
             }
 
@@ -163,7 +174,6 @@ pub mod Dao {
     }
 }
 
-use smart_contract::interfaces::i_dao::I_Dao;
 use starknet::ContractAddress as address;
 
 #[derive(Drop, Serde, starknet::Store)]
