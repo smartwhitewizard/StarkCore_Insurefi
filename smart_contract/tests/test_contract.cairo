@@ -6,6 +6,8 @@ use smart_contract::automobile_policy::{Automobile_calculator, };
 use smart_contract::constants::{vehicle_request::Vehicle_Request, };
 use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcherTrait;
 use smart_contract::interfaces::i_automobile_insurance::I_automobile_insuranceDispatcher;
+// use smart_contract::interfaces::i_dao::I_DaoDispatcherTrait;
+// use smart_contract::interfaces::i_dao::I_DaoinsuranceDispatcher;
 use starknet::ContractAddress;
 use core::traits::TryInto;
 
@@ -47,6 +49,8 @@ fn generate_vehicle_request() -> Vehicle_Request {
 fn test_for_vehicle_registration() {
 let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
     let contract_address = deploy_contract("Automobile_calculator");
+    let contract_two_address = deploy_contract("Dao");
+    
     let dispatcher = I_automobile_insuranceDispatcher { contract_address };
 
     let driver: ContractAddress = 'first_voter'.try_into().unwrap();
@@ -73,10 +77,23 @@ let _admin_address: ContractAddress = 'admin'.try_into().unwrap();
     
     cheat_caller_address(contract_address, _admin_address, CheatSpan::Indefinite);
     dispatcher.mint(driver, 70000000);
+    dispatcher.mint(_admin_address, 700000000000000);
+    dispatcher.set_dao_address(contract_two_address);
    
     cheat_caller_address(contract_address, driver, CheatSpan::Indefinite);
     
     dispatcher.initiate_policy(1);
+    
+    let t: ByteArray = "I was in an accident";
+    
+    let r: ByteArray = "I was in an accident";
+    
+    
+    
+    dispatcher.file_claim(1, 6, t, r);
+    
+    cheat_caller_address(contract_address, _admin_address, CheatSpan::Indefinite);
+    dispatcher.finalize_and_execute_claim(1);
 }
 
 
