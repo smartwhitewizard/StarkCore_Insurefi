@@ -1,23 +1,23 @@
-type NavTypes = {
+type SideTypes = {
   href: string;
-  name: string;
+  icon: string;
 };
 
-export const Navlinks: NavTypes[] = [
+export const SideLinks: SideTypes[] = [
   {
-    href: "/",
-    name: "Home",
+    href: "/account",
+    icon: "Home",
   },
   {
-    href: "/about",
-    name: "About",
+    href: "/dashboard",
+    icon: "About",
   },
   {
     href: "/projects",
-    name: "Projects",
+    icon: "Projects",
   },
   {
     href: "/contact",
-    name: "Contact",
+    icon: "Contact",
   },
 ];
