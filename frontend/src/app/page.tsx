@@ -12,7 +12,6 @@ type Props = {}
 const Page = (props: Props) => {
   return (
     <div className="flex flex-col min-h-[100dvh]">
-      <Navbar />
       <HeroSection />
       <AboutSection />
       <OurOffersSection />
