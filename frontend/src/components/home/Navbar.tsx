@@ -9,7 +9,8 @@ type Props = {}
 const Navbar = (props: Props) => {
   return (
     <header className="px-4 lg:px-6 h-14 flex justify-between items-center">
-      <Link href="#" className="flex items-center justify-center" prefetch={false}>
+
+      <Link href="/" className="flex items-center justify-center" prefetch={false}>
         <Image src={logo} width={40} height={42} alt='logo' />
         <h2 className='font-bold text-xl'>StarkCore</h2>
       </Link>

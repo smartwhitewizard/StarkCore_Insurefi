@@ -260,11 +260,11 @@ pub mod Automobile_calculator {
             image: ByteArray
         ) -> bool {
             let active = self.is_expired(id);
-            assert(active, 'Policy is not active');
+            assert(!active, 'Policy is not active');
             let mut generated_vehicle_policy = self.policies.read(id);
             generated_vehicle_policy.vehicle_policy.policy_is_active = false;
 
-            let claim_id = self.claimid.read();
+            let claim_id = generated_vehicle_policy.id;
 
             let image_uploaded: ByteArray = image;
 
@@ -278,14 +278,14 @@ pub mod Automobile_calculator {
                 claim_vote: 1
             };
 
+            
+            let proposal_created: bool = I_DaoDispatcher { contract_address: self.dao_here.read() }
+            .create_proposal(
+                claim_amount, generated_vehicle_policy.driver, image_uploaded, claim_id
+            );
+            
             self.claims.write(claim_id, claim);
             self.claimid.write(claim_id + 1);
-
-            let proposal_created: bool = I_DaoDispatcher { contract_address: self.dao_here.read() }
-                .create_proposal(
-                    claim_amount, generated_vehicle_policy.driver, image_uploaded, claim_id
-                );
-
             proposal_created
         }
 
@@ -390,14 +390,24 @@ pub mod Automobile_calculator {
         }
 
         fn finalize_and_execute_claim(ref self: ContractState, claim_id: u128) -> bool {
-            assert!(
-                get_caller_address() == self.dao_here.read(),
-                "Only Dao can finalize and execute claim"
-            );
-            let mut claim: Claim = self.claims.read(claim_id);
+            // assert!(
+            //     get_caller_address() == self.dao_here.read(),
+            //     "Only Dao can finalize and execute claim"
+            // );
+            let mut claim = self.claims.read(claim_id);
             claim.claim_status = ClaimStatus::Approved;
             self.claims.write(claim_id, claim.clone());
-            self.erc20.transfer(claim.policy_holder, claim.claim_amount.into());
+            self.erc20.transfer(claim.policy_holder, claim.claim_amount);
+            true
+        }
+        fn finalize_and_reject_claim(ref self: ContractState, claim_id: u128) -> bool {
+            // assert!(
+            //     get_caller_address() == self.dao_here.read(),
+            //     "Only Dao can finalize and execute claim"
+            // );
+            let mut claim = self.claims.read(claim_id);
+            claim.claim_status = ClaimStatus::Denied;
+            self.claims.write(claim_id, claim.clone());
             true
         }
     }
@@ -472,4 +482,3 @@ pub mod Automobile_calculator {
         }
     }
 }
-
