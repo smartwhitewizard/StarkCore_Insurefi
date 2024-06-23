@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css"
+import Script from "next/script";
 import { Poppins as FontSans } from "next/font/google"
 import { cn } from "@/lib/utils"
 import { StarknetProvider } from "@/provider/starknet-provider";
+import Navbar from "@/components/home/Navbar";
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -26,7 +28,10 @@ export default function RootLayout({
         "min-h-screen w-full font-sans antialiased bg-white",
         fontSans.variable
       )}>
-        <StarknetProvider>{children}</StarknetProvider>
+        <StarknetProvider>
+          <Navbar/>
+          {children}
+        </StarknetProvider>
       </body>
     </html>
   );
