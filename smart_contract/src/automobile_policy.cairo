@@ -83,7 +83,9 @@ pub mod Automobile_calculator {
         OwnableEvent: OwnableComponent::Event,
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
+        #[flat]
         Policy_initiated: Policy_initiated,
+        #[flat]
         Policy_renewed: Policy_renewed,
     }
 

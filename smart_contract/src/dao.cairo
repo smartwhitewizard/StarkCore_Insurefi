@@ -39,7 +39,7 @@ pub mod Dao {
                     proposals_count = proposals_count + 1;
                 };
 
-            all_proposals
+            return all_proposals;
         }
 
         fn vote_on_proposal_claim(
@@ -174,12 +174,12 @@ pub mod Dao {
     }
 }
 
-use starknet::ContractAddress as address;
+use starknet::ContractAddress;
 
 #[derive(Drop, Serde, starknet::Store)]
 pub struct Claim_Proposal {
     pub id: u128,
-    pub proposal_creator: address,
+    pub proposal_creator: ContractAddress,
     pub claim_amount: u256,
     pub for_claim: u128,
     pub against_claim: u128,
